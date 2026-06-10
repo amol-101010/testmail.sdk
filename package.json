@@ -1,0 +1,55 @@
+{
+  "name": "@testmail/sdk",
+  "version": "0.1.0",
+  "description": "Official TypeScript SDK for testmail.stream — programmable temporary email inboxes",
+  "author": "testmail.stream",
+  "license": "MIT",
+  "keywords": [
+    "email",
+    "temporary-email",
+    "testing",
+    "playwright",
+    "cypress",
+    "jest",
+    "vitest",
+    "testmail",
+    "otp",
+    "disposable-email"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.cjs",
+      "types": "./dist/types/index.d.ts"
+    }
+  },
+  "main": "./dist/cjs/index.cjs",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean --out-dir dist",
+    "build:check": "tsc --noEmit",
+    "dev": "tsup src/index.ts --format esm,cjs --dts --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.42",
+    "tsup": "^8.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/testmail-sdk"
+  }
+}
