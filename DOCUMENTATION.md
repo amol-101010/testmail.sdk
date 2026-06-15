@@ -1,8 +1,8 @@
 # testmail.stream TypeScript SDK — Documentation
 
 > **Scope:** A typed, isomorphic TypeScript client that any developer can
-> `npm install` and use to create temporary inboxes and read received emails —
-> with zero knowledge of the underlying Cloudflare / Supabase internals.
+> `npm install` and use to create temporary or permanent inboxes and read
+> received emails — with zero knowledge of the underlying Cloudflare / Supabase internals.
 
 ---
 
@@ -11,11 +11,22 @@
 The SDK is the **primary interface** for end-users of testmail.stream.
 It wraps the Worker REST API into a clean, Promise-based class with:
 
-- API key authentication
+- API key authentication (personal `tm_` key from the user dashboard — both Free and Pro)
 - Typed request / response objects
 - A `waitForEmail()` helper that polls until a matching email arrives
   (essential for Playwright / Cypress / Jest integration tests)
+- Plan-aware error types: `PlanRestrictionError` and `QuotaExceededError`
 - Full ESM + CommonJS dual build so it works in Node, Bun, Deno, and browsers
+
+### Plan limits enforced by the API (not the SDK)
+
+| | Free | Pro |
+|---|---|---|
+| Temp inboxes active at once | 10 | 10 |
+| Permanent inboxes | 0 | 5 |
+
+The SDK itself has no plan-checking logic — it simply surfaces the errors the
+Worker returns when a limit is exceeded.
 
 ---
 
@@ -53,9 +64,9 @@ sdk/
 import { TestmailClient } from '@testmail/sdk';
 
 const client = new TestmailClient({
-  apiKey: 'your-api-key',
-  baseUrl: 'https://worker.testmail.stream',  // optional, defaults to production
-  timeout: 10_000,                            // optional, ms per individual fetch
+  apiKey: 'tm_...',                    // required — from your dashboard
+  baseUrl: 'https://testmail.stream',  // optional, defaults to production
+  timeout: 10_000,                     // optional, ms per individual fetch
 });
 ```
 
@@ -63,38 +74,55 @@ const client = new TestmailClient({
 
 | Option | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `apiKey` | `string` | ✅ | — | Bearer token issued from testmail dashboard |
-| `baseUrl` | `string` | ❌ | `https://worker.testmail.stream` | Override for local dev / staging |
+| `apiKey` | `string` | ✅ | — | Personal `tm_` key from the testmail.stream dashboard. Free and Pro users both have one. |
+| `baseUrl` | `string` | ❌ | `https://testmail.stream` | Override for local dev / staging |
 | `timeout` | `number` | ❌ | `10000` | Per-request fetch timeout in ms |
 
 ---
 
 ### 3.2 `createInbox(options?)`
 
-Creates a new temporary inbox and returns its details.
+Creates a new inbox (temporary or permanent) and returns its details.
 
 ```typescript
+// Temporary inbox — Free + Pro, lives for ttlMinutes then auto-expires
 const inbox = await client.createInbox({
-  ttlSeconds: 3600,    // optional; default from server (3600 = 1 hour)
-  label: 'signup-test' // optional; human label stored for your reference
+  alias:      'signup-test',  // optional
+  ttlMinutes: 60,             // 5–1440 (24 h), default 60
+});
+
+// Permanent inbox — Pro only, never auto-expires
+const permanent = await client.createInbox({
+  alias:     'ci-builds',
+  permanent: true,
 });
 
 // inbox: Inbox
 // {
-//   id:         "550e8400-e29b-41d4-a716-446655440000",
-//   address:    "abc123@testmail.stream",
-//   createdAt:  Date,
-//   expiresAt:  Date,
-//   label:      "signup-test"
+//   id:        "550e8400-e29b-41d4-a716-446655440000",
+//   address:   "abc123@testmail.stream",
+//   alias:     "signup-test",
+//   permanent: false,
+//   createdAt: Date,
+//   expiresAt: Date,   // year 2099 for permanent inboxes
 // }
 ```
 
-**Worker route:** `POST /inboxes`
+**Worker route:** `POST /inbox`
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `ttlSeconds` | `number` | `3600` | Inbox lifetime in seconds (max: 86400 / 24 h) |
-| `label` | `string` | `undefined` | Arbitrary tag stored alongside the inbox |
+| `alias` | `string` | auto-generated | Human-readable unique name (1–64 chars, lowercase/digits/hyphens) |
+| `ttlMinutes` | `number` | `60` | Inbox lifetime in minutes (5–1440). Ignored when `permanent: true`. |
+| `permanent` | `boolean` | `false` | Never auto-expire. **Pro plan only.** Throws `PlanRestrictionError` on Free accounts. |
+
+**Errors thrown:**
+
+| Error | Condition |
+|---|---|
+| `AliasConflictError` | Alias already taken by an active inbox |
+| `PlanRestrictionError` | `permanent: true` on a Free account (HTTP 403) |
+| `QuotaExceededError` | 10+ active temp inboxes, or 5+ permanent inboxes on Pro (HTTP 409) |
 
 ---
 
@@ -200,33 +228,31 @@ await client.deleteInbox(inbox.id);
 // sdk/src/types.ts
 
 export interface Inbox {
-  id:        string;
-  address:   string;
-  createdAt: Date;
-  expiresAt: Date;
-  label?:    string;
-  deleted:   boolean;
+  id:         string;
+  address:    string;
+  prefix:     string;
+  alias:      string | null;
+  ttlMinutes: number;      // 0 for permanent inboxes
+  permanent:  boolean;     // true = never expires (Pro only)
+  createdAt:  Date;
+  expiresAt:  Date;        // year 2099 for permanent inboxes
 }
 
 export interface Email {
   id:         string;
   inboxId:    string;
-  from:       string;
-  subject:    string;
+  from:       string | null;
+  subject:    string | null;
   receivedAt: Date;
   bodyText:   string | null;
   bodyHtml:   string | null;
-  rawSize:    number;
+  rawSize:    number | null;
 }
 
 export interface CreateInboxOptions {
-  ttlSeconds?: number;
-  label?:      string;
-}
-
-export interface GetEmailsOptions {
-  page?:    number;
-  perPage?: number;
+  alias?:      string;
+  ttlMinutes?: number;
+  permanent?:  boolean;  // Pro only; throws PlanRestrictionError on Free
 }
 
 export interface WaitForEmailOptions {
@@ -236,8 +262,8 @@ export interface WaitForEmailOptions {
 }
 
 export interface ClientOptions {
-  apiKey:   string;
-  baseUrl?: string;
+  apiKey:   string;   // personal tm_ key from dashboard; required for Free + Pro
+  baseUrl?: string;   // default: "https://testmail.stream"
   timeout?: number;
 }
 ```
@@ -247,36 +273,36 @@ export interface ClientOptions {
 ## 5. Error Handling
 
 ```typescript
-// sdk/src/errors.ts
+// sdk/src/errors.ts (hierarchy)
 
-export class TestmailError extends Error {
-  constructor(message: string) { super(message); this.name = 'TestmailError'; }
-}
-
-export class ApiError extends TestmailError {
-  constructor(
-    public statusCode: number,
-    public body: unknown,
-    message: string
-  ) { super(message); this.name = 'ApiError'; }
-}
-
-export class TimeoutError extends TestmailError {
-  constructor(inboxId: string, timeoutMs: number) {
-    super(`No matching email in inbox ${inboxId} within ${timeoutMs}ms`);
-    this.name = 'TimeoutError';
-  }
-}
-
-export class AuthError extends ApiError {
-  // Thrown when the server returns 401
-}
+TestmailError
+├── ApiError(statusCode, body, message)
+│   ├── AuthError             — HTTP 401: wrong/missing API key
+│   ├── AliasConflictError    — HTTP 409: alias taken; carries .existingInboxId
+│   ├── PlanRestrictionError  — HTTP 403: feature requires Pro plan
+│   └── QuotaExceededError    — HTTP 409: plan cap hit; carries .limit + .current
+└── TimeoutError              — waitForEmail timed out
+└── RequestTimeoutError       — network/server fetch timed out
 ```
 
 Usage:
 ```typescript
-import { ApiError, TimeoutError } from '@testmail/sdk';
+import {
+  ApiError, TimeoutError, PlanRestrictionError, QuotaExceededError
+} from '@testmail/sdk';
 
+// Handling permanent inbox creation errors
+try {
+  await client.createInbox({ permanent: true });
+} catch (err) {
+  if (err instanceof PlanRestrictionError) {
+    // Free account — redirect to upgrade page
+  } else if (err instanceof QuotaExceededError) {
+    console.log(`${err.current}/${err.limit} permanent inboxes used`);
+  }
+}
+
+// Handling waitForEmail errors
 try {
   const email = await client.waitForEmail(inbox.id, { timeout: 10_000 });
 } catch (err) {
@@ -500,15 +526,19 @@ Versioning strategy: **semver**.
 
 ## 11. Worker Changes Required for SDK
 
-The existing `src/worker.ts` already covers the core SDK routes.
-These minor additions improve the SDK experience:
+Required changes to `src/worker.ts` as part of the multi-tenant rollout:
 
 | Change | Why |
 |---|---|
-| Accept `label` in `POST /inboxes` body | SDK `createInbox({ label })` needs to store it |
-| Return `label` in `GET /inboxes` and `GET /inboxes/:id` | SDK `listInboxes()` should surface the label |
-| Add `message_count` to inbox responses | Avoids a second fetch just to check if emails arrived |
-| `DELETE /inboxes/:id` — already exists ✅ | Nothing to add |
+| User API key auth path (`tm_` prefix) | SDK requests are authenticated with personal keys, not the admin key |
+| Accept `permanent` in `POST /inbox` body | SDK `createInbox({ permanent: true })` (Pro only) |
+| Return `permanent` field in all inbox responses | SDK `Inbox.permanent` must be populated |
+| Return HTTP 403 with `{ error: '...' }` for plan restriction | SDK throws `PlanRestrictionError` |
+| Return HTTP 409 with `{ error: '...', limit, current }` for quota | SDK throws `QuotaExceededError` with `.limit` + `.current` |
+| Scope `GET /inboxes` to caller's `user_id` | Returns only the calling user's inboxes |
+| Scope ownership checks on `GET/DELETE /inbox/:id` | Users can only access their own inboxes |
+
+The default `baseUrl` in `ClientOptions` is updated from `https://worker.testmail.stream` to `https://testmail.stream`.
 
 ---
 

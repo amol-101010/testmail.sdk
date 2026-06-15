@@ -1,7 +1,7 @@
 // ─── Public SDK types ─────────────────────────────────────────────────────────
 
 /**
- * An active temporary inbox.
+ * An active temporary or permanent inbox.
  */
 export interface Inbox {
   /** UUID assigned by the database */
@@ -16,8 +16,14 @@ export interface Inbox {
    * null when no alias was provided at creation time.
    */
   alias: string | null;
-  /** How long this inbox lives, in minutes */
+  /** How long this inbox lives, in minutes. 0 for permanent inboxes. */
   ttlMinutes: number;
+  /**
+   * If true, this inbox never auto-expires (expiresAt will be year 2099).
+   * Requires a Pro plan — createInbox() throws PlanRestrictionError for Free users.
+   * Pro plan allows a maximum of 5 permanent inboxes.
+   */
+  permanent: boolean;
   createdAt: Date;
   expiresAt: Date;
 }
@@ -51,8 +57,17 @@ export interface CreateInboxOptions {
   /**
    * How many minutes this inbox should live.
    * Min: 5 | Max: 1440 (24 h) | Default: 60
+   * Ignored when permanent is true.
    */
   ttlMinutes?: number;
+  /**
+   * Create a permanent inbox that never auto-expires.
+   * Requires a Pro plan — throws PlanRestrictionError for Free users.
+   * Pro plan allows a maximum of 5 permanent inboxes across all aliases.
+   * Throws QuotaExceededError if the 5-inbox cap is reached.
+   * @default false
+   */
+  permanent?: boolean;
 }
 
 export interface WaitForEmailOptions {
@@ -74,11 +89,15 @@ export interface WaitForEmailOptions {
 }
 
 export interface ClientOptions {
-  /** API key issued from the testmail.stream dashboard */
+  /**
+   * Your personal API key from the testmail.stream dashboard.
+   * Starts with "tm_". Free and Pro users both receive one on sign-up.
+   */
   apiKey: string;
   /**
-   * Worker base URL.
-   * @default "https://worker.testmail.stream"
+   * API base URL. Default is the production endpoint.
+   * Override for local dev or staging.
+   * @default "https://testmail.stream"
    */
   baseUrl?: string;
   /**
@@ -96,6 +115,7 @@ export interface RawInbox {
   prefix: string;
   alias: string | null;
   ttl_minutes: number;
+  permanent: boolean;
   created_at: string;
   expires_at: string;
   deleted: boolean;

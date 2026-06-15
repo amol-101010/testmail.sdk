@@ -1,7 +1,7 @@
 # @testmail/sdk
 
 TypeScript SDK for [testmail.stream](https://testmail.stream) — programmable
-temporary email inboxes for automated tests and workflows.
+temporary and permanent email inboxes for automated tests and workflows.
 
 ## Install
 
@@ -10,6 +10,13 @@ npm install @testmail/sdk
 ```
 
 Requires **Node ≥ 18** (uses native `fetch`). Works in ESM and CommonJS projects.
+
+## Get an API key
+
+Sign up or request access at [testmail.stream](https://testmail.stream). Your personal API key
+(starts with `tm_`) is shown in your dashboard — copy it and store it as an environment variable.
+
+Both **Free** and **Pro** accounts receive an API key on sign-up.
 
 ## Quick start
 
@@ -40,11 +47,20 @@ await client.deleteInbox(inbox.id);
 
 ```typescript
 new TestmailClient({
-  apiKey:   'sk-...',                             // required
-  baseUrl:  'https://worker.testmail.stream',     // optional (default)
-  timeout:  10_000,                               // optional ms per request
+  apiKey:   'tm_...',                    // required — from your dashboard
+  baseUrl:  'https://testmail.stream',   // optional (default)
+  timeout:  10_000,                      // optional ms per request
 })
 ```
+
+## Plans
+
+| Feature | Free | Pro |
+|---|---|---|
+| API key | ✅ | ✅ |
+| Temp inboxes (active at once) | 10 | 10 |
+| Permanent inboxes | ❌ | 5 |
+| Permanent inbox duration | — | 1 year |
 
 ## API
 
@@ -53,14 +69,26 @@ new TestmailClient({
 Creates a new inbox. Default TTL: **60 minutes**.
 
 ```typescript
+// Temporary inbox (Free + Pro)
 const inbox = await client.createInbox({
   alias:      'my-test',   // optional human-readable name (unique)
   ttlMinutes: 60,          // 5–1440 (24 h)
+});
+
+// Permanent inbox — Pro only
+const permanent = await client.createInbox({
+  alias:     'ci-builds',
+  permanent: true,          // never expires; counts against your 5-inbox Pro limit
 });
 ```
 
 Throws **`AliasConflictError`** if the alias is already taken by an active inbox.
 The error carries `.existingInboxId` so you can decide whether to reuse it.
+
+Throws **`PlanRestrictionError`** (HTTP 403) when `permanent: true` is used on a Free account.
+
+Throws **`QuotaExceededError`** (HTTP 409) when the active inbox cap is reached
+(10 temp for Free/Pro, or 5 permanent for Pro). The error carries `.limit` and `.current`.
 
 ---
 
@@ -90,8 +118,8 @@ if (await client.aliasExists('my-test')) { ... }
 Smart lookup — pass either a UUID or an alias; the method detects which one.
 
 ```typescript
-const inbox = await client.resolve('my-test');       // alias
-const inbox2 = await client.resolve('550e8400-...');  // id
+const inbox = await client.resolve('my-test');        // alias
+const inbox2 = await client.resolve('550e8400-...');  // UUID
 ```
 
 ---
@@ -104,7 +132,7 @@ Returns a single inbox by ID, or `null`.
 
 ### `listInboxes()`
 
-Returns all active inboxes visible to this API key.
+Returns all active inboxes owned by your API key.
 
 ---
 
@@ -174,12 +202,28 @@ test('email verification', async ({ page }) => {
 | Class | When thrown |
 |---|---|
 | `AuthError` | Wrong or missing API key (HTTP 401) |
-| `AliasConflictError` | Alias already taken (HTTP 409) |
+| `AliasConflictError` | Alias already taken by an active inbox (HTTP 409) |
+| `PlanRestrictionError` | Feature requires Pro plan — e.g. `permanent: true` on Free (HTTP 403) |
+| `QuotaExceededError` | Active inbox cap reached (HTTP 409); check `.limit` and `.current` |
 | `TimeoutError` | `waitForEmail` exceeded its timeout |
 | `RequestTimeoutError` | Network/server timeout on a single fetch |
 | `ApiError` | Any other non-2xx response |
 
 All errors extend `TestmailError` which extends `Error`.
+
+```typescript
+import { PlanRestrictionError, QuotaExceededError } from '@testmail/sdk';
+
+try {
+  await client.createInbox({ permanent: true });
+} catch (err) {
+  if (err instanceof PlanRestrictionError) {
+    console.log('Upgrade to Pro for permanent inboxes');
+  } else if (err instanceof QuotaExceededError) {
+    console.log(`Hit limit: ${err.current}/${err.limit} permanent inboxes`);
+  }
+}
+```
 
 ## Build
 

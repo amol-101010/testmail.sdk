@@ -11,6 +11,8 @@ import {
   AliasConflictError,
   ApiError,
   AuthError,
+  PlanRestrictionError,
+  QuotaExceededError,
   RequestTimeoutError,
 } from './errors.js';
 import { pollForEmail } from './poller.js';
@@ -24,6 +26,7 @@ function toInbox(raw: RawInbox): Inbox {
     prefix:     raw.prefix,
     alias:      raw.alias,
     ttlMinutes: raw.ttl_minutes,
+    permanent:  raw.permanent,
     createdAt:  new Date(raw.created_at),
     expiresAt:  new Date(raw.expires_at),
   };
@@ -69,7 +72,7 @@ export class TestmailClient {
   constructor(options: ClientOptions) {
     if (!options.apiKey) throw new Error('TestmailClient: apiKey is required');
     this.apiKey   = options.apiKey;
-    this.baseUrl  = (options.baseUrl ?? 'https://worker.testmail.stream').replace(/\/$/, '');
+    this.baseUrl  = (options.baseUrl ?? 'https://testmail.stream').replace(/\/$/, '');
     this.timeout  = options.timeout ?? 10_000;
   }
 
@@ -115,14 +118,23 @@ export class TestmailClient {
     if (!response.ok) {
       if (response.status === 401) throw new AuthError(parsed);
 
-      // Alias conflict — server returns 409 with inbox_id + expires_at
-      if (response.status === 409 && typeof parsed === 'object' && parsed !== null) {
-        const p = parsed as Record<string, string>;
-        if (p.inbox_id && p.expires_at) {
-          // Extract alias from the request path if we're in createInbox context.
-          // The field won't be set here so we pass a placeholder; AliasConflictError
-          // is always thrown from createInbox() which adds the alias.
-          throw new AliasConflictError('', p.inbox_id, new Date(p.expires_at), parsed);
+      if (typeof parsed === 'object' && parsed !== null) {
+        const p = parsed as Record<string, unknown>;
+
+        // Plan restriction — 403 with error: 'permanent_inboxes_require_pro'
+        if (response.status === 403 && p.error === 'permanent_inboxes_require_pro') {
+          throw new PlanRestrictionError(parsed);
+        }
+
+        // 409 — could be alias conflict OR quota exceeded
+        if (response.status === 409) {
+          if (p.error === 'quota_exceeded' && typeof p.limit === 'number' && typeof p.current === 'number') {
+            throw new QuotaExceededError(p.limit, p.current, parsed);
+          }
+          // Alias conflict: has inbox_id + expires_at
+          if (typeof p.inbox_id === 'string' && typeof p.expires_at === 'string') {
+            throw new AliasConflictError('', p.inbox_id, new Date(p.expires_at), parsed);
+          }
         }
       }
 
@@ -148,18 +160,20 @@ export class TestmailClient {
    * @param options.ttlMinutes  Inbox lifetime (5–1440 min). Default: 60.
    */
   async createInbox(options: CreateInboxOptions = {}): Promise<Inbox> {
-    const { alias, ttlMinutes } = options;
+    const { alias, ttlMinutes, permanent } = options;
     let raw: RawInbox;
     try {
       raw = await this.request<RawInbox>('POST', '/inbox', {
-        alias:       alias,
+        alias,
         ttl_minutes: ttlMinutes,
+        permanent,
       });
     } catch (err) {
       // Re-throw AliasConflictError with the alias filled in
       if (err instanceof AliasConflictError && alias) {
         throw new AliasConflictError(alias, err.existingInboxId, err.existingExpiresAt, err.body);
       }
+      // PlanRestrictionError and QuotaExceededError bubble up as-is
       throw err;
     }
     return toInbox(raw);

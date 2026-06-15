@@ -18,6 +18,8 @@ export {
   AliasConflictError,
   TimeoutError,
   RequestTimeoutError,
+  PlanRestrictionError,
+  QuotaExceededError,
 } from './errors.js';
 
 // Named re-export for convenience

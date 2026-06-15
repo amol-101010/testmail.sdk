@@ -79,3 +79,34 @@ export class RequestTimeoutError extends TestmailError {
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
+
+/**
+ * Thrown when the requested operation requires a Pro plan but the API key
+ * belongs to a Free account.
+ * Example: calling createInbox({ permanent: true }) on a Free plan.
+ */
+export class PlanRestrictionError extends ApiError {
+  constructor(body: unknown) {
+    super(403, body, 'This feature requires a Pro plan. Upgrade at testmail.stream/dashboard.');
+    this.name = 'PlanRestrictionError';
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * Thrown when a plan limit has been reached.
+ * Example: attempting to create an 11th active temp inbox on Free,
+ * or a 6th permanent inbox on Pro.
+ * Check `limit` and `current` for details.
+ */
+export class QuotaExceededError extends ApiError {
+  constructor(
+    public readonly limit: number,
+    public readonly current: number,
+    body: unknown
+  ) {
+    super(409, body, `Plan quota exceeded (limit: ${limit}, current: ${current}). Delete some inboxes or upgrade your plan.`);
+    this.name = 'QuotaExceededError';
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
