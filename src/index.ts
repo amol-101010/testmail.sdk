@@ -6,7 +6,11 @@ export { TestmailClient } from './client.js';
 export type {
   Inbox,
   Email,
+  Team,
+  TeamMember,
+  TeamDetail,
   CreateInboxOptions,
+  CreateTeamOptions,
   WaitForEmailOptions,
   ClientOptions,
 } from './types.js';
