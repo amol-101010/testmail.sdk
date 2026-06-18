@@ -233,3 +233,13 @@ npm install
 npm run build        # produces dist/esm, dist/cjs, dist/types
 npm run build:check  # tsc type-check only, no emit
 ```
+
+## Public Temporary Inboxes
+
+`testmail.stream` also supports public, anonymous temporary inboxes. Since these do not require authentication or API keys, they are not wrapped in the standard `TestmailClient` SDK. Instead, you can call them directly via HTTP REST endpoints:
+
+* **Create public inbox**: `POST https://api.testmail.stream/public/inbox` -> returns `{ id, address, expires_at }`
+* **List public messages**: `GET https://api.testmail.stream/public/inbox/:id/messages` -> returns message list JSON
+* **Download public attachment**: `GET https://api.testmail.stream/attachment/:attId`
+
+Creations are strictly limited to **1 per IP address per 24 hours** (quota is not reset by manual deletion), and public inboxes auto-destruct in **1 hour**.

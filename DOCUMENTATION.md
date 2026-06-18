@@ -549,3 +549,32 @@ The default `baseUrl` in `ClientOptions` is updated from `https://worker.testmai
 - Browser-native build (CORS headers on Worker needed first)
 - Rate-limit retry logic with exponential back-off (add after seeing real traffic)
 - Multiple API keys / key rotation within one client instance
+
+---
+
+## 13. Public Temporary Inboxes (REST-only)
+
+`testmail.stream` also supports public, anonymous temporary inboxes. Since these do not require authentication or API keys, they are not wrapped in the standard `TestmailClient` class. Instead, they are exposed as direct public HTTP endpoints:
+
+### 13.1 `POST /public/inbox`
+Provision an anonymous public inbox.
+* **Headers**: None required.
+* **Rate Limits**: Strictly restricted to **1 creation per IP address per 24 hours**.
+* **Lifetime**: Expires and auto-destructs after **1 hour** (60 minutes).
+* **Response**:
+  ```json
+  {
+    "id": "uuid",
+    "address": "a8x9j2m1@testmail.stream",
+    "expires_at": "2026-06-09T11:00:00Z"
+  }
+  ```
+
+### 13.2 `GET /public/inbox/:id`
+Fetch the active public inbox metadata (useful for countdown synchronization). Returns `404` if the inbox is expired or deleted.
+
+### 13.3 `GET /public/inbox/:id/messages`
+Retrieve all emails received by the public inbox by UUID. Returns `404` if the inbox is expired or deleted.
+
+### 13.4 `GET /attachment/:attId`
+Anonymously download email attachments or load inline media associated with public inboxes. If the attachment belongs to a private inbox, this gateway will fall back to authenticated token checks.
