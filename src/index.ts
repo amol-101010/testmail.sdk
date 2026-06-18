@@ -13,7 +13,17 @@ export type {
   CreateTeamOptions,
   WaitForEmailOptions,
   ClientOptions,
+  ExtractOtpOptions,
+  ExtractLinkOptions,
+  WaitForOtpOptions,
+  WaitForLinkOptions,
 } from './types.js';
+
+export {
+  extractOtp,
+  extractLinks,
+  extractVerificationLink,
+} from './extract.js';
 
 export {
   TestmailError,

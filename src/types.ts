@@ -35,6 +35,18 @@ export interface TeamDetail extends Team {
   members: TeamMember[];
 }
 
+export interface Attachment {
+  id: string;
+  messageId: string;
+  filename: string | null;
+  mimeType: string | null;
+  sizeBytes: number;
+  contentId: string | null;
+  isInline: boolean;
+  storageKey: string;
+  createdAt: Date;
+}
+
 export interface Email {
   id: string;
   inboxId: string;
@@ -44,6 +56,7 @@ export interface Email {
   bodyHtml: string | null;
   rawSize: number | null;
   receivedAt: Date;
+  attachments?: Attachment[];
 }
 
 // --- Request option types ------------------------------------------------------
@@ -67,6 +80,22 @@ export interface WaitForEmailOptions {
   interval?: number;
   filter?: (email: Email) => boolean;
 }
+
+export interface ExtractOtpOptions {
+  length?: number;
+  regex?: RegExp;
+  keywords?: string[];
+  alphanumeric?: boolean;
+  preferHtml?: boolean;
+}
+
+export interface ExtractLinkOptions {
+  keywords?: string[];
+  domainAllowlist?: string[];
+}
+
+export interface WaitForOtpOptions extends WaitForEmailOptions, ExtractOtpOptions {}
+export interface WaitForLinkOptions extends WaitForEmailOptions, ExtractLinkOptions {}
 
 export interface ClientOptions {
   apiKey: string;
@@ -108,6 +137,18 @@ export interface RawTeamDetail extends RawTeam {
   }>;
 }
 
+export interface RawAttachment {
+  id: string;
+  message_id: string;
+  filename: string | null;
+  mime_type: string | null;
+  size_bytes: number;
+  content_id: string | null;
+  is_inline: boolean;
+  storage_key: string;
+  created_at: string;
+}
+
 export interface RawMessage {
   id: string;
   inbox_id: string;
@@ -117,4 +158,5 @@ export interface RawMessage {
   body_html: string | null;
   raw_size: number | null;
   received_at: string;
+  attachments?: RawAttachment[];
 }

@@ -12,6 +12,10 @@ import {
   TeamDetail,
   TeamMember,
   WaitForEmailOptions,
+  WaitForOtpOptions,
+  WaitForLinkOptions,
+  Attachment,
+  RawAttachment,
 } from './types.js';
 import {
   AliasConflictError,
@@ -22,6 +26,7 @@ import {
   RequestTimeoutError,
 } from './errors.js';
 import { pollForEmail } from './poller.js';
+import { extractOtp, extractVerificationLink } from './extract.js';
 
 // --- Deserialise raw server shapes -> SDK types --------------------------------
 
@@ -67,6 +72,20 @@ function toTeamDetail(raw: RawTeamDetail): TeamDetail {
   };
 }
 
+function toAttachment(raw: RawAttachment): Attachment {
+  return {
+    id:          raw.id,
+    messageId:   raw.message_id,
+    filename:    raw.filename,
+    mimeType:    raw.mime_type,
+    sizeBytes:   raw.size_bytes,
+    contentId:   raw.content_id,
+    isInline:    raw.is_inline,
+    storageKey:  raw.storage_key,
+    createdAt:   new Date(raw.created_at),
+  };
+}
+
 function toEmail(raw: RawMessage): Email {
   return {
     id:          raw.id,
@@ -77,6 +96,7 @@ function toEmail(raw: RawMessage): Email {
     bodyHtml:    raw.body_html,
     rawSize:     raw.raw_size,
     receivedAt:  new Date(raw.received_at),
+    attachments: raw.attachments?.map(toAttachment),
   };
 }
 
@@ -216,6 +236,52 @@ export class TestmailClient {
     return pollForEmail(inboxId, () => this.getEmails(inboxId), options);
   }
 
+  async waitForOtp(inboxId: string, options: WaitForOtpOptions = {}): Promise<string> {
+    const { timeout, interval, ...extractOpts } = options;
+    let extractedOtp: string | null = null;
+    
+    const filterWrapper = (email: Email): boolean => {
+      if (options.filter && !options.filter(email)) return false;
+      const code = extractOtp(email, extractOpts);
+      if (code) {
+        extractedOtp = code;
+        return true;
+      }
+      return false;
+    };
+
+    await pollForEmail(inboxId, () => this.getEmails(inboxId), {
+      timeout,
+      interval,
+      filter: filterWrapper,
+    });
+
+    return extractedOtp!;
+  }
+
+  async waitForLink(inboxId: string, options: WaitForLinkOptions = {}): Promise<string> {
+    const { timeout, interval, ...extractOpts } = options;
+    let extractedLink: string | null = null;
+
+    const filterWrapper = (email: Email): boolean => {
+      if (options.filter && !options.filter(email)) return false;
+      const link = extractVerificationLink(email, extractOpts);
+      if (link) {
+        extractedLink = link;
+        return true;
+      }
+      return false;
+    };
+
+    await pollForEmail(inboxId, () => this.getEmails(inboxId), {
+      timeout,
+      interval,
+      filter: filterWrapper,
+    });
+
+    return extractedLink!;
+  }
+
   async deleteInbox(inboxId: string): Promise<void> {
     await this.request<{ success: boolean }>('DELETE', '/inbox/' + inboxId);
   }
@@ -259,5 +325,43 @@ export class TestmailClient {
 
   async deleteTeam(teamId: string): Promise<void> {
     await this.request('DELETE', '/teams/' + teamId);
+  }
+
+  async downloadAttachment(attachmentId: string): Promise<ArrayBuffer> {
+    const url = this.baseUrl + '/attachment/' + encodeURIComponent(attachmentId);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeout);
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer ' + this.apiKey,
+        },
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new RequestTimeoutError(url, this.timeout);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (!response.ok) {
+      let parsed: unknown;
+      try {
+        parsed = await response.json();
+      } catch {
+        parsed = null;
+      }
+      if (response.status === 401) throw new AuthError(parsed);
+      const msg = (parsed as { error?: string })?.error ?? response.statusText;
+      throw new ApiError(response.status, parsed, msg);
+    }
+
+    return response.arrayBuffer();
   }
 }
