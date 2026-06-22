@@ -43,9 +43,8 @@ jobs:
         run: npm run build
 
       - name: Publish to npm
-        # --provenance: attach a signed SLSA provenance attestation to the package
         # --access public: required for scoped packages; harmless for unscoped ones
-        run: npm publish --provenance --access public
+        run: npm publish --access public
         env:
           # Set NPM_TOKEN in: GitHub repo → Settings → Secrets → Actions
           # Generate the token at: https://www.npmjs.com/settings/<username>/tokens
