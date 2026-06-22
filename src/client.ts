@@ -14,6 +14,9 @@ import {
   WaitForEmailOptions,
   WaitForOtpOptions,
   WaitForLinkOptions,
+  SearchEmailsOptions,
+  EmailPage,
+  AttachmentDownload,
   Attachment,
   RawAttachment,
 } from './types.js';
@@ -27,6 +30,39 @@ import {
 } from './errors.js';
 import { pollForEmail } from './poller.js';
 import { extractOtp, extractVerificationLink, extractLinkByText, hasText } from './extract.js';
+
+// --- Internal helpers ----------------------------------------------------------
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/** Normalize a Date or string to an ISO-8601 string for query params. */
+function toIso(value: Date | string): string {
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+/** Parse a `Retry-After` header (delta-seconds or HTTP date) into ms, or null. */
+function parseRetryAfter(value: string | null): number | null {
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  const date = Date.parse(value);
+  if (!Number.isNaN(date)) return Math.max(0, date - Date.now());
+  return null;
+}
+
+/** Parse a filename out of a Content-Disposition header, or null. */
+function parseContentDispositionFilename(value: string | null): string | null {
+  if (!value) return null;
+  // RFC 5987 extended form first: filename*=UTF-8''foo.pdf
+  const ext = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(value);
+  if (ext?.[1]) {
+    try { return decodeURIComponent(ext[1].trim().replace(/^"|"$/g, '')); } catch { /* fall through */ }
+  }
+  const basic = /filename="?([^";]+)"?/i.exec(value);
+  return basic?.[1]?.trim() ?? null;
+}
 
 // --- Deserialise raw server shapes -> SDK types --------------------------------
 
@@ -106,34 +142,28 @@ export class TestmailClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly timeout: number;
+  private readonly maxRetries: number;
+  private readonly retryDelay: number;
 
   constructor(options: ClientOptions) {
     if (!options.apiKey) throw new Error('TestmailClient: apiKey is required');
-    this.apiKey   = options.apiKey;
-    this.baseUrl  = (options.baseUrl ?? 'https://testmail.stream').replace(/\/$/, '');
-    this.timeout  = options.timeout ?? 10_000;
+    this.apiKey     = options.apiKey;
+    this.baseUrl    = (options.baseUrl ?? 'https://testmail.stream').replace(/\/$/, '');
+    this.timeout    = options.timeout ?? 10_000;
+    this.maxRetries = Math.max(0, options.maxRetries ?? 2);
+    this.retryDelay = Math.max(0, options.retryDelay ?? 500);
   }
 
-  private async request<T>(
-    method: 'GET' | 'POST' | 'DELETE',
-    path: string,
-    body?: unknown
-  ): Promise<T> {
-    const url = this.baseUrl + path;
+  /**
+   * Single fetch with a per-attempt timeout. Throws RequestTimeoutError on
+   * abort and rethrows network errors; non-2xx responses are returned as-is
+   * (the caller decides how to map them).
+   */
+  private async fetchOnce(url: string, init: RequestInit): Promise<Response> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeout);
-
-    let response: Response;
     try {
-      response = await fetch(url, {
-        method,
-        headers: {
-          Authorization:  'Bearer ' + this.apiKey,
-          'Content-Type': 'application/json',
-        },
-        body:   body != null ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
-      });
+      return await fetch(url, { ...init, signal: controller.signal });
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
         throw new RequestTimeoutError(url, this.timeout);
@@ -142,6 +172,85 @@ export class TestmailClient {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /**
+   * fetchOnce wrapped with retry-on-transient-failure: network errors, HTTP
+   * 429, and 5xx are retried up to `maxRetries` times with exponential backoff
+   * (honoring a `Retry-After` header when present). Timeouts are NOT retried —
+   * they reflect the caller's configured deadline.
+   */
+  private async fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+    let attempt = 0;
+    while (true) {
+      let response: Response;
+      try {
+        response = await this.fetchOnce(url, init);
+      } catch (err) {
+        // Don't retry deadline timeouts; do retry transient network errors.
+        if (err instanceof RequestTimeoutError || attempt >= this.maxRetries) throw err;
+        await sleep(this.backoff(attempt));
+        attempt++;
+        continue;
+      }
+
+      const transient = response.status === 429 || response.status >= 500;
+      if (transient && attempt < this.maxRetries) {
+        const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
+        await sleep(Math.max(retryAfterMs ?? 0, this.backoff(attempt)));
+        attempt++;
+        continue;
+      }
+
+      return response;
+    }
+  }
+
+  private backoff(attempt: number): number {
+    // Exponential with light jitter to avoid thundering-herd retries.
+    const base = this.retryDelay * 2 ** attempt;
+    return base + Math.floor(Math.random() * (this.retryDelay / 2));
+  }
+
+  /** Maps a non-ok response (with its parsed body) to the right typed error. */
+  private throwForResponse(status: number, statusText: string, parsed: unknown): never {
+    if (status === 401) throw new AuthError(parsed);
+
+    if (typeof parsed === 'object' && parsed !== null) {
+      const p = parsed as Record<string, unknown>;
+
+      if (status === 403 && p.error === 'permanent_inboxes_require_pro') {
+        throw new PlanRestrictionError(parsed);
+      }
+
+      if (status === 409) {
+        if (p.error === 'quota_exceeded' && typeof p.limit === 'number' && typeof p.current === 'number') {
+          throw new QuotaExceededError(p.limit, p.current, parsed);
+        }
+        if (typeof p.inbox_id === 'string' && typeof p.expires_at === 'string') {
+          throw new AliasConflictError('', p.inbox_id, new Date(p.expires_at), parsed);
+        }
+      }
+    }
+
+    const msg = (parsed as { error?: string })?.error ?? statusText;
+    throw new ApiError(status, parsed, msg);
+  }
+
+  private async request<T>(
+    method: 'GET' | 'POST' | 'DELETE',
+    path: string,
+    body?: unknown
+  ): Promise<T> {
+    const url = this.baseUrl + path;
+    const response = await this.fetchWithRetry(url, {
+      method,
+      headers: {
+        Authorization:  'Bearer ' + this.apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: body != null ? JSON.stringify(body) : undefined,
+    });
 
     let parsed: unknown;
     try {
@@ -150,29 +259,7 @@ export class TestmailClient {
       parsed = null;
     }
 
-    if (!response.ok) {
-      if (response.status === 401) throw new AuthError(parsed);
-
-      if (typeof parsed === 'object' && parsed !== null) {
-        const p = parsed as Record<string, unknown>;
-
-        if (response.status === 403 && p.error === 'permanent_inboxes_require_pro') {
-          throw new PlanRestrictionError(parsed);
-        }
-
-        if (response.status === 409) {
-          if (p.error === 'quota_exceeded' && typeof p.limit === 'number' && typeof p.current === 'number') {
-            throw new QuotaExceededError(p.limit, p.current, parsed);
-          }
-          if (typeof p.inbox_id === 'string' && typeof p.expires_at === 'string') {
-            throw new AliasConflictError('', p.inbox_id, new Date(p.expires_at), parsed);
-          }
-        }
-      }
-
-      const msg = (parsed as { error?: string })?.error ?? response.statusText;
-      throw new ApiError(response.status, parsed, msg);
-    }
+    if (!response.ok) this.throwForResponse(response.status, response.statusText, parsed);
 
     return parsed as T;
   }
@@ -214,7 +301,7 @@ export class TestmailClient {
 
   async getInbox(inboxId: string): Promise<Inbox | null> {
     try {
-      const raw = await this.request<RawInbox>('GET', '/inbox/' + inboxId);
+      const raw = await this.request<RawInbox>('GET', '/inbox/' + encodeURIComponent(inboxId));
       return toInbox(raw);
     } catch (err) {
       if (err instanceof ApiError && err.statusCode === 404) return null;
@@ -227,9 +314,43 @@ export class TestmailClient {
     return raws.map(toInbox);
   }
 
+  /**
+   * Fetch the most recent emails in an inbox (newest first, up to 200).
+   * For filtering, full-text search, or paging beyond 200, use searchEmails().
+   */
   async getEmails(inboxId: string): Promise<Email[]> {
-    const raws = await this.request<RawMessage[]>('GET', '/inbox/' + inboxId + '/messages');
+    const raws = await this.request<RawMessage[]>(
+      'GET',
+      '/inbox/' + encodeURIComponent(inboxId) + '/messages'
+    );
     return raws.map(toEmail);
+  }
+
+  /**
+   * Search/filter emails server-side with cursor pagination. Returns one page
+   * of results plus a `nextCursor` (null when there are no more pages).
+   */
+  async searchEmails(inboxId: string, options: SearchEmailsOptions = {}): Promise<EmailPage> {
+    const params = new URLSearchParams();
+    // Force the server's paginated response shape even with no other filters.
+    params.set('paginate', 'true');
+    if (options.query)         params.set('q', options.query);
+    if (options.from)          params.set('from', options.from);
+    if (options.subject)       params.set('subject', options.subject);
+    if (options.since)         params.set('since', toIso(options.since));
+    if (options.until)         params.set('until', toIso(options.until));
+    if (options.hasAttachment) params.set('hasAttachment', 'true');
+    if (options.cursor)        params.set('cursor', options.cursor);
+    if (options.limit != null) params.set('limit', String(options.limit));
+
+    const res = await this.request<{ messages: RawMessage[]; nextCursor: string | null }>(
+      'GET',
+      '/inbox/' + encodeURIComponent(inboxId) + '/messages?' + params.toString()
+    );
+    return {
+      emails: (res.messages ?? []).map(toEmail),
+      nextCursor: res.nextCursor ?? null,
+    };
   }
 
   async waitForEmail(inboxId: string, options: WaitForEmailOptions = {}): Promise<Email> {
@@ -239,7 +360,7 @@ export class TestmailClient {
   async waitForOtp(inboxId: string, options: WaitForOtpOptions = {}): Promise<string> {
     const { timeout, interval, ...extractOpts } = options;
     let extractedOtp: string | null = null;
-    
+
     const filterWrapper = (email: Email): boolean => {
       if (options.filter && !options.filter(email)) return false;
       const code = extractOtp(email, extractOpts);
@@ -318,7 +439,7 @@ export class TestmailClient {
   }
 
   async deleteInbox(inboxId: string): Promise<void> {
-    await this.request<{ success: boolean }>('DELETE', '/inbox/' + inboxId);
+    await this.request<{ success: boolean }>('DELETE', '/inbox/' + encodeURIComponent(inboxId));
   }
 
   async getOrCreateInbox(alias: string, options: Omit<CreateInboxOptions, 'alias'> = {}): Promise<Inbox> {
@@ -346,44 +467,35 @@ export class TestmailClient {
   }
 
   async getTeam(teamId: string): Promise<TeamDetail> {
-    const raw = await this.request<RawTeamDetail>('GET', '/teams/' + teamId);
+    const raw = await this.request<RawTeamDetail>('GET', '/teams/' + encodeURIComponent(teamId));
     return toTeamDetail(raw);
   }
 
   async inviteTeamMember(teamId: string, email: string): Promise<void> {
-    await this.request('POST', '/teams/' + teamId + '/members', { email });
+    await this.request('POST', '/teams/' + encodeURIComponent(teamId) + '/members', { email });
   }
 
   async removeTeamMember(teamId: string, userId: string): Promise<void> {
-    await this.request('DELETE', '/teams/' + teamId + '/members/' + userId);
+    await this.request(
+      'DELETE',
+      '/teams/' + encodeURIComponent(teamId) + '/members/' + encodeURIComponent(userId)
+    );
   }
 
   async deleteTeam(teamId: string): Promise<void> {
-    await this.request('DELETE', '/teams/' + teamId);
+    await this.request('DELETE', '/teams/' + encodeURIComponent(teamId));
   }
 
-  async downloadAttachment(attachmentId: string): Promise<ArrayBuffer> {
+  /**
+   * Download an attachment's raw bytes plus its content type and filename.
+   * Shares the same timeout + retry transport as every other request.
+   */
+  async downloadAttachment(attachmentId: string): Promise<AttachmentDownload> {
     const url = this.baseUrl + '/attachment/' + encodeURIComponent(attachmentId);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeout);
-
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Authorization: 'Bearer ' + this.apiKey,
-        },
-        signal: controller.signal,
-      });
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        throw new RequestTimeoutError(url, this.timeout);
-      }
-      throw err;
-    } finally {
-      clearTimeout(timer);
-    }
+    const response = await this.fetchWithRetry(url, {
+      method: 'GET',
+      headers: { Authorization: 'Bearer ' + this.apiKey },
+    });
 
     if (!response.ok) {
       let parsed: unknown;
@@ -392,11 +504,13 @@ export class TestmailClient {
       } catch {
         parsed = null;
       }
-      if (response.status === 401) throw new AuthError(parsed);
-      const msg = (parsed as { error?: string })?.error ?? response.statusText;
-      throw new ApiError(response.status, parsed, msg);
+      this.throwForResponse(response.status, response.statusText, parsed);
     }
 
-    return response.arrayBuffer();
+    return {
+      data: await response.arrayBuffer(),
+      contentType: response.headers.get('content-type'),
+      filename: parseContentDispositionFilename(response.headers.get('content-disposition')),
+    };
   }
 }

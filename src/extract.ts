@@ -1,21 +1,16 @@
-import { Email } from './types.js';
+import { Email, ExtractOtpOptions, ExtractLinkOptions } from './types.js';
 
-export interface ExtractOtpOptions {
-  length?: number;
-  regex?: RegExp;
-  keywords?: string[];
-  alphanumeric?: boolean;
-  preferHtml?: boolean;
-}
-
-export interface ExtractLinkOptions {
-  keywords?: string[];
-  domainAllowlist?: string[];
-}
+// Re-export so existing deep imports (`@testmail-stream/sdk/extract`) keep working.
+export type { ExtractOtpOptions, ExtractLinkOptions } from './types.js';
 
 function stripHtml(html: string): string {
-  // Replace HTML tags with space to preserve word separation
-  let text = html.replace(/<[^>]*>/g, ' ');
+  // Drop <script> and <style> blocks entirely (tag AND contents) so CSS/JS
+  // text never leaks into visible-text searches or OTP/link extraction.
+  let text = html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, ' ');
+  // Replace remaining HTML tags with space to preserve word separation
+  text = text.replace(/<[^>]*>/g, ' ');
   // Decode basic HTML entities to avoid breaking regexes on common characters
   text = text
     .replace(/&nbsp;/g, ' ')
@@ -49,7 +44,7 @@ function isValidLink(url: string): boolean {
 
 export function extractOtp(email: Email, opts: ExtractOtpOptions = {}): string | null {
   const preferHtml = opts.preferHtml ?? false;
-  
+
   // Decide target text
   let sourceText = '';
   if (preferHtml && email.bodyHtml) {
@@ -59,7 +54,7 @@ export function extractOtp(email: Email, opts: ExtractOtpOptions = {}): string |
   } else if (email.bodyHtml) {
     sourceText = stripHtml(email.bodyHtml);
   }
-  
+
   if (!sourceText) return null;
 
   // Use custom RegExp if provided
@@ -71,7 +66,7 @@ export function extractOtp(email: Email, opts: ExtractOtpOptions = {}): string |
   // Build the code-matching pattern
   // Alphanumeric vs digits
   const len = opts.length ?? null;
-  
+
   let codeRegex: RegExp;
   if (opts.alphanumeric) {
     if (len !== null) {
@@ -106,7 +101,7 @@ export function extractOtp(email: Email, opts: ExtractOtpOptions = {}): string |
 
   // Keyword-proximity scoring
   const keywordRegex = new RegExp(`\\b(${keywords.join('|')})\\b`, 'gi');
-  
+
   const keywordIndices: number[] = [];
   let kwMatch: RegExpExecArray | null;
   while ((kwMatch = keywordRegex.exec(sourceText)) !== null) {
@@ -125,7 +120,7 @@ export function extractOtp(email: Email, opts: ExtractOtpOptions = {}): string |
     while (true) {
       const idx = sourceText.indexOf(candidate, searchIdx);
       if (idx === -1) break;
-      
+
       for (const kwIdx of keywordIndices) {
         const distance = Math.abs(idx - kwIdx);
         if (distance < minDistance) {
@@ -196,7 +191,7 @@ export function extractVerificationLink(email: Email, opts: ExtractLinkOptions =
     candidateLinks = links.filter(link => {
       try {
         const urlObj = new URL(link);
-        return domainAllowlist.some(domain => 
+        return domainAllowlist.some(domain =>
           urlObj.hostname === domain || urlObj.hostname.endsWith('.' + domain)
         );
       } catch {
@@ -289,4 +284,3 @@ export function hasText(email: Email, searchText: string): boolean {
 
   return false;
 }
-

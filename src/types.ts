@@ -81,6 +81,42 @@ export interface WaitForEmailOptions {
   filter?: (email: Email) => boolean;
 }
 
+/** Server-side search/filter/pagination for email listing. */
+export interface SearchEmailsOptions {
+  /** Full-text search across subject + body (maps to the server's `q`). */
+  query?: string;
+  /** Substring match on the sender address. */
+  from?: string;
+  /** Substring match on the subject. */
+  subject?: string;
+  /** Only emails received at/after this time (Date or ISO string). */
+  since?: Date | string;
+  /** Only emails received at/before this time (Date or ISO string). */
+  until?: Date | string;
+  /** Only emails that have at least one attachment. */
+  hasAttachment?: boolean;
+  /** Opaque cursor from a previous page's `nextCursor`. */
+  cursor?: string;
+  /** Page size (server caps at 200; default 50). */
+  limit?: number;
+}
+
+/** One page of emails plus the cursor for the next page (null when exhausted). */
+export interface EmailPage {
+  emails: Email[];
+  nextCursor: string | null;
+}
+
+/** Result of downloadAttachment(). */
+export interface AttachmentDownload {
+  /** Raw file bytes. */
+  data: ArrayBuffer;
+  /** MIME type from the response, or null if absent. */
+  contentType: string | null;
+  /** Filename parsed from Content-Disposition, or null if absent. */
+  filename: string | null;
+}
+
 export interface ExtractOtpOptions {
   length?: number;
   regex?: RegExp;
@@ -100,7 +136,18 @@ export interface WaitForLinkOptions extends WaitForEmailOptions, ExtractLinkOpti
 export interface ClientOptions {
   apiKey: string;
   baseUrl?: string;
+  /** Per-request timeout in ms (default 10000). */
   timeout?: number;
+  /**
+   * Max automatic retries for transient failures — network errors, HTTP 429,
+   * and 5xx. Default 2 (i.e. up to 3 attempts total). Set 0 to disable.
+   */
+  maxRetries?: number;
+  /**
+   * Base delay in ms for exponential backoff between retries (default 500).
+   * Honored alongside a server `Retry-After` header, whichever is longer.
+   */
+  retryDelay?: number;
 }
 
 // --- Raw server shapes (internal) -----------------------------------------------

@@ -133,12 +133,12 @@ if (email.attachments && email.attachments.length > 0) {
   const attachment = email.attachments[0];
   console.log(`Found attachment: ${attachment.filename} (${attachment.sizeBytes} bytes)`);
   
-  // Download the attachment as an ArrayBuffer
-  const buffer = await client.downloadAttachment(attachment.id);
+  // Download the attachment (bytes + content type + filename)
+  const file = await client.downloadAttachment(attachment.id);
   
   // Node.js: Save the file to disk
   import * as fs from 'fs';
-  fs.writeFileSync(attachment.filename || 'attachment.bin', Buffer.from(buffer));
+  fs.writeFileSync(file.filename || attachment.filename || 'attachment.bin', Buffer.from(file.data));
 }
 ```
 
@@ -168,6 +168,18 @@ try {
 
 ---
 
+### 5. Wait for a One-Time Passcode (OTP)
+For login / 2FA flows, `waitForOtp` waits for the email and returns just the code:
+
+```typescript
+const inbox = await client.createInbox({ alias: 'login-2fa' });
+// ... trigger the login that emails a code ...
+const code = await client.waitForOtp(inbox.id, { length: 6, timeout: 30_000 });
+await page.fill('[name=otp]', code);
+```
+
+---
+
 ## Client options
 
 ```typescript
@@ -175,7 +187,13 @@ new TestmailClient({
   apiKey:   'tm_...',                    // required — from your profile page
   baseUrl:  'https://testmail.stream',   // optional (default)
   timeout:  10_000,                      // optional ms per request
+  maxRetries: 2,                         // optional, retries on network/429/5xx (default 2; 0 disables)
+  retryDelay: 500,                       // optional, backoff base in ms (default 500)
 })
+
+### Automatic retries
+
+Transient failures — network errors, HTTP **429**, and **5xx** — are retried automatically with exponential backoff (honoring a `Retry-After` header when present). Request timeouts are **not** retried, since they reflect your configured `timeout`. Tune with `maxRetries` / `retryDelay`, or set `maxRetries: 0` to disable.
 ```
 
 ## Plans
@@ -271,6 +289,34 @@ const emails = await client.getEmails(inbox.id);
 
 ---
 
+### `searchEmails(inboxId, options?)`
+
+Server-side search, filtering, and cursor pagination. Returns one page of emails plus a `nextCursor` (`null` when there are no more pages). Use this instead of `getEmails` for busy inboxes (which returns at most 200) or when you need filtering.
+
+```typescript
+// First page of matching emails
+const page = await client.searchEmails(inbox.id, {
+  query:         'invoice',          // full-text search across subject + body
+  from:          'billing@acme.com', // substring match on sender
+  subject:       'Receipt',          // substring match on subject
+  since:         new Date(Date.now() - 86_400_000), // Date or ISO string
+  hasAttachment: true,
+  limit:         50,                 // server caps at 200 (default 50)
+});
+
+console.log(page.emails.length, page.nextCursor);
+
+// Walk every page
+let cursor: string | null = undefined as any;
+do {
+  const p = await client.searchEmails(inbox.id, { query: 'invoice', cursor });
+  for (const email of p.emails) console.log(email.subject);
+  cursor = p.nextCursor;
+} while (cursor);
+```
+
+---
+
 ### `waitForEmail(inboxId, options?)`
 
 Polls until a matching email arrives or the timeout elapses.
@@ -284,6 +330,74 @@ const email = await client.waitForEmail(inbox.id, {
 ```
 
 Throws **`TimeoutError`** if no match is found within `timeout` ms.
+
+---
+
+### `waitForOtp(inboxId, options?)`
+
+Polls until an email arrives, extracts a one-time code from it, and returns the code as a string. Combines `waitForEmail` + `extractOtp`. Accepts all `waitForEmail` options plus extraction options (`length`, `regex`, `keywords`, `alphanumeric`, `preferHtml`).
+
+```typescript
+const code = await client.waitForOtp(inbox.id, {
+  timeout: 30_000,
+  length:  6,                 // expect a 6-digit code
+  // alphanumeric: true,      // for codes like AB-C123
+  // filter: e => e.from === 'noreply@acme.com',
+});
+await page.fill('[name=otp]', code);
+```
+
+Throws **`TimeoutError`** if no email yielding a code arrives within `timeout` ms.
+
+---
+
+### `waitForLink(inboxId, options?)`
+
+Polls until an email arrives, extracts the most likely verification/action link, and returns the URL. Combines `waitForEmail` + `extractVerificationLink`. Accepts `waitForEmail` options plus `keywords` and `domainAllowlist`.
+
+```typescript
+const link = await client.waitForLink(inbox.id, {
+  keywords:        ['verify', 'confirm'],
+  domainAllowlist: ['acme.com'], // only accept links on these hosts
+});
+await page.goto(link);
+```
+
+---
+
+### `waitForLinkByText(inboxId, linkText, options?)`
+
+Polls until an email contains an anchor (or text line) whose visible text matches `linkText`, then returns that link's URL.
+
+```typescript
+const resetUrl = await client.waitForLinkByText(inbox.id, 'Reset Password', { timeout: 15_000 });
+```
+
+---
+
+### Standalone extractors
+
+The extraction helpers are also exported as pure functions you can run against any `Email` you already have (e.g. one returned by `getEmails`/`searchEmails`):
+
+```typescript
+import {
+  extractOtp,
+  extractLinks,
+  extractVerificationLink,
+  extractLinkByText,
+  hasText,
+} from '@testmail-stream/sdk';
+
+const code  = extractOtp(email, { length: 6 });          // string | null
+const links = extractLinks(email);                       // string[]
+const verify = extractVerificationLink(email, {          // string | null
+  domainAllowlist: ['acme.com'],
+});
+const payUrl = extractLinkByText(email, 'Pay Invoice');  // string ('' if none)
+const present = hasText(email, 'verification code');     // boolean
+```
+
+All of these read the plain-text body when present and otherwise fall back to the HTML body with `<script>`/`<style>` blocks stripped, so markup and styling never pollute matches.
 
 ---
 

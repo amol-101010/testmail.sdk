@@ -1,6 +1,6 @@
 {
   "name": "@testmail-stream/sdk",
-  "version": "0.4.0",
+  "version": "0.1.0",
   "description": "Official TypeScript SDK for testmail.stream — programmable temporary email inboxes",
   "author": "testmail.stream",
   "license": "MIT",

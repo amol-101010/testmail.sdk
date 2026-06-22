@@ -287,15 +287,15 @@ console.log('Clicking link:', link); // "https://myapp.com/verify?token=..."
 
 ### 3.12 `downloadAttachment(attachmentId)`
 
-Downloads the binary contents of an email attachment. Returns an `ArrayBuffer`.
+Downloads an email attachment. Returns `{ data: ArrayBuffer, contentType: string | null, filename: string | null }`. Shares the client's timeout + automatic-retry transport.
 
 ```typescript
 const attachment = email.attachments[0];
-const buffer = await client.downloadAttachment(attachment.id);
+const file = await client.downloadAttachment(attachment.id);
 
 // Node.js example: save file to local disk
 import * as fs from 'fs';
-fs.writeFileSync(attachment.filename || 'attachment.bin', Buffer.from(buffer));
+fs.writeFileSync(file.filename || attachment.filename || 'attachment.bin', Buffer.from(file.data));
 ```
 
 **Worker route:** `GET /attachment/:id`
