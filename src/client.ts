@@ -148,7 +148,7 @@ export class TestmailClient {
   constructor(options: ClientOptions) {
     if (!options.apiKey) throw new Error('TestmailClient: apiKey is required');
     this.apiKey     = options.apiKey;
-    this.baseUrl    = (options.baseUrl ?? 'https://testmail.stream').replace(/\/$/, '');
+    this.baseUrl    = (options.baseUrl ?? 'https://testmail-stream.testmailstream.workers.dev').replace(/\/$/, '');
     this.timeout    = options.timeout ?? 10_000;
     this.maxRetries = Math.max(0, options.maxRetries ?? 2);
     this.retryDelay = Math.max(0, options.retryDelay ?? 500);
