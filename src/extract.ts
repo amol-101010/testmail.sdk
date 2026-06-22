@@ -260,27 +260,59 @@ export function extractLinkByText(email: Email, linkText: string): string {
   return '';
 }
 
+export function normalizeWhitespace(str: string): string {
+  return str.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+export function normalizeText(str: string): string {
+  return normalizeWhitespace(str).toLowerCase();
+}
+
 export function hasText(email: Email, searchText: string): boolean {
-  const normalizedSearch = searchText.toLowerCase();
+  const normalizedSearch = normalizeText(searchText);
   if (!normalizedSearch) return false;
 
   // Check subject
-  if (email.subject && email.subject.toLowerCase().includes(normalizedSearch)) {
+  if (email.subject && normalizeText(email.subject).includes(normalizedSearch)) {
     return true;
   }
 
   // Check bodyText
-  if (email.bodyText && email.bodyText.toLowerCase().includes(normalizedSearch)) {
+  if (email.bodyText && normalizeText(email.bodyText).includes(normalizedSearch)) {
     return true;
   }
 
   // Check bodyHtml (stripped of tags for clean visible text search)
   if (email.bodyHtml) {
-    const cleanHtml = stripHtml(email.bodyHtml).toLowerCase();
-    if (cleanHtml.includes(normalizedSearch)) {
+    const cleanHtml = stripHtml(email.bodyHtml);
+    if (normalizeText(cleanHtml).includes(normalizedSearch)) {
       return true;
     }
   }
 
   return false;
 }
+
+export function findEmailBySubject(emails: Email[], subject: string | RegExp): Email | null {
+  const isRegExp = subject instanceof RegExp;
+  const normalizedSearch = isRegExp ? null : normalizeText(subject as string);
+
+  return emails.find(email => {
+    const emailSubject = email.subject ?? '';
+
+    if (isRegExp) {
+      const cleanSubject = normalizeWhitespace(emailSubject);
+      return (subject as RegExp).test(cleanSubject);
+    } else {
+      const normalizedEmailSubject = normalizeText(emailSubject);
+      return normalizedEmailSubject.includes(normalizedSearch!);
+    }
+  }) ?? null;
+}
+
+export function findEmailByText(emails: Email[], text: string): Email | null {
+  const normalizedSearch = normalizeText(text);
+  if (!normalizedSearch) return null;
+  return emails.find(email => hasText(email, normalizedSearch)) ?? null;
+}
+

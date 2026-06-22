@@ -29,7 +29,14 @@ import {
   RequestTimeoutError,
 } from './errors.js';
 import { pollForEmail } from './poller.js';
-import { extractOtp, extractVerificationLink, extractLinkByText, hasText } from './extract.js';
+import {
+  extractOtp,
+  extractVerificationLink,
+  extractLinkByText,
+  hasText,
+  findEmailBySubject,
+  findEmailByText,
+} from './extract.js';
 
 // --- Internal helpers ----------------------------------------------------------
 
@@ -436,6 +443,14 @@ export class TestmailClient {
 
   hasText(email: Email, searchText: string): boolean {
     return hasText(email, searchText);
+  }
+
+  findEmailBySubject(emails: Email[], subject: string | RegExp): Email | null {
+    return findEmailBySubject(emails, subject);
+  }
+
+  findEmailByText(emails: Email[], text: string): Email | null {
+    return findEmailByText(emails, text);
   }
 
   async deleteInbox(inboxId: string): Promise<void> {

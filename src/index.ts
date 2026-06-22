@@ -29,6 +29,10 @@ export {
   extractVerificationLink,
   extractLinkByText,
   hasText,
+  normalizeText,
+  normalizeWhitespace,
+  findEmailBySubject,
+  findEmailByText,
 } from './extract.js';
 
 export {

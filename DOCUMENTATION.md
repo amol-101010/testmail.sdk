@@ -18,6 +18,22 @@ It wraps the Worker REST API into a clean, Promise-based class with:
 - Plan-aware error types: `PlanRestrictionError` and `QuotaExceededError`
 - Full ESM + CommonJS dual build so it works in Node, Bun, Deno, and browsers
 
+### Installation & Upgrading
+
+To install the SDK in a project:
+
+```bash
+npm install @testmail-stream/sdk
+```
+
+To upgrade the package to the latest version and update/save it in your `package.json`, run:
+
+```bash
+npm install @testmail-stream/sdk@latest
+```
+
+*(Alternatively, if you are using other package managers, run `yarn add @testmail-stream/sdk@latest`, `pnpm add @testmail-stream/sdk@latest`, or `bun add @testmail-stream/sdk@latest` respectively to update your dependencies in `package.json`).*
+
 ### Plan limits enforced by the API (not the SDK)
 
 | | Free | Pro |
@@ -333,10 +349,50 @@ const resetUrl = client.extractLinkByText(email, 'Reset Password');
 
 ### 3.15 `hasText(email, searchText)`
 
-Synchronous utility that checks if a specific text phrase exists anywhere in the email's subject, plain text body, or stripped HTML body (case-insensitive).
+Synchronous utility that checks if a specific text phrase exists anywhere in the email's subject, plain text body, or stripped HTML body (case-insensitive). Note that all search/filtering operations collapse and strip line breaks and carriage returns to ensure match robustness against line wraps.
 
 ```typescript
 const isValid = client.hasText(email, 'successful payment');
+```
+
+---
+
+### 3.16 `findEmailBySubject(emails, subject)`
+
+Synchronous utility that searches an array of `Email` objects and returns the first email matching the given `subject` string or `RegExp`. Matching is resilient to line wraps and collapses carriage returns and newlines to spaces prior to matching. String matching is case-insensitive. RegExp matching tests against the original case of the subject with line breaks normalized.
+
+```typescript
+// Look up in an array of emails by subject string
+const matchString = client.findEmailBySubject(emails, 'Verify Your Email');
+
+// Look up in an array of emails by regular expression
+const matchRegex = client.findEmailBySubject(emails, /Verify Your/i);
+```
+
+---
+
+### 3.17 `findEmailByText(emails, text)`
+
+Synchronous utility that searches an array of `Email` objects and returns the first email whose subject or body contains the specified `text`. Matching is case-insensitive and resilient to line wraps (collapsing newlines and carriage returns to spaces in both the search query and email fields).
+
+```typescript
+// Find the email containing the unique billing invoice string
+const invoiceEmail = client.findEmailByText(emails, 'successful payment invoice #1024');
+```
+
+---
+
+### 3.18 `normalizeWhitespace(str)` and `normalizeText(str)`
+
+Synchronous utilities to clean up strings prior to custom matches.
+- `normalizeWhitespace(str)` collapses carriage returns, newlines, and consecutive whitespace into standard single spaces and trims the result, preserving letter casing.
+- `normalizeText(str)` runs `normalizeWhitespace(str)` and then lowercases the output.
+
+```typescript
+import { normalizeWhitespace, normalizeText } from '@testmail-stream/sdk';
+
+const clean = normalizeWhitespace('  Hello\r\nWorld!  '); // "Hello World!"
+const lowerClean = normalizeText('  Hello\r\nWorld!  '); // "hello world!"
 ```
 
 ---

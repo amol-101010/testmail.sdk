@@ -9,6 +9,15 @@ temporary and permanent email inboxes for automated tests and workflows.
 npm install @testmail-stream/sdk
 ```
 
+### Upgrading the Package
+To upgrade the SDK to the latest version and update/save it in your `package.json`, run the following command:
+
+```bash
+npm install @testmail-stream/sdk@latest
+```
+
+*(If you are using yarn, pnpm, or bun, run `yarn add @testmail-stream/sdk@latest`, `pnpm add @testmail-stream/sdk@latest`, or `bun add @testmail-stream/sdk@latest` respectively to upgrade and update your `package.json` dependencies).*
+
 Requires **Node ≥ 18** (uses native `fetch`). Works in ESM and CommonJS projects.
 
 ## Get an API key
@@ -81,7 +90,14 @@ const inbox = await client.findByAlias('signup-test-flow');
 if (inbox) {
   // Option A: Retrieve all messages and search client-side
   const emails = await client.getEmails(inbox.id);
-  const registrationEmail = emails.find(e => e.subject === 'Welcome to our platform!');
+  
+  // Find a specific email in the array by its subject (resilient to line breaks/case)
+  const registrationEmail = client.findEmailBySubject(emails, 'Welcome to our platform!');
+  // Or using a regular expression:
+  const verifyEmail = client.findEmailBySubject(emails, /Verify your email/i);
+  
+  // Find a specific email in the array by matching unique text in the subject or body (resilient to line breaks)
+  const paymentEmail = client.findEmailByText(emails, 'successful payment invoice #1024');
   
   // Option B: Retrieve using a smart lookup (alias or UUID)
   const resolvedInbox = await client.resolve('signup-test-flow');
@@ -386,6 +402,8 @@ import {
   extractVerificationLink,
   extractLinkByText,
   hasText,
+  findEmailBySubject,
+  findEmailByText,
 } from '@testmail-stream/sdk';
 
 const code  = extractOtp(email, { length: 6 });          // string | null
@@ -395,9 +413,14 @@ const verify = extractVerificationLink(email, {          // string | null
 });
 const payUrl = extractLinkByText(email, 'Pay Invoice');  // string ('' if none)
 const present = hasText(email, 'verification code');     // boolean
+
+// Find email in an array of emails by subject (case and newline resilient)
+const welcome = findEmailBySubject(emails, 'Welcome to testmail'); // Email | null
+// Find email in an array containing search text anywhere in subject/body (newline resilient)
+const codeMsg = findEmailByText(emails, 'activation code');        // Email | null
 ```
 
-All of these read the plain-text body when present and otherwise fall back to the HTML body with `<script>`/`<style>` blocks stripped, so markup and styling never pollute matches.
+All of these read the plain-text body when present and otherwise fall back to the HTML body with `<script>`/`<style>` blocks stripped, so markup, styling, and line breaks never pollute matches. All search methods automatically normalize and collapse newlines, carriage returns, and extra whitespace to standard spaces prior to matching.
 
 ---
 

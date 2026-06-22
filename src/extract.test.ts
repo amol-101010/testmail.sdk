@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { extractOtp, extractLinks, extractVerificationLink, extractLinkByText, hasText } from './extract.js';
+import {
+  extractOtp,
+  extractLinks,
+  extractVerificationLink,
+  extractLinkByText,
+  hasText,
+  normalizeText,
+  normalizeWhitespace,
+  findEmailBySubject,
+  findEmailByText,
+} from './extract.js';
 import { Email } from './types.js';
 
 const mockEmail = (bodyText: string | null, bodyHtml: string | null): Email => ({
@@ -121,5 +131,79 @@ describe('hasText', () => {
     expect(hasText(email, 'verify')).toBe(true);
     expect(hasText(email, '<b>')).toBe(false); // HTML tags are stripped
   });
+
+  it('detects search text with newlines and line breaks resiliently', () => {
+    const email = mockEmail('Hello\r\nWorld, this is a\ntest.', null);
+    expect(hasText(email, 'Hello World')).toBe(true);
+    expect(hasText(email, 'World,\r\nthis')).toBe(true);
+    expect(hasText(email, 'this is a test')).toBe(true);
+  });
 });
+
+describe('normalizeWhitespace', () => {
+  it('collapses spaces and strips line breaks but keeps case', () => {
+    expect(normalizeWhitespace('  Hello\r\n\n  World! \t ')).toBe('Hello World!');
+    expect(normalizeWhitespace('Some\rText\nHere')).toBe('Some Text Here');
+  });
+});
+
+describe('normalizeText', () => {
+  it('strips newlines, collapses spaces, trims and lowercases', () => {
+    expect(normalizeText('  Hello\r\n\n  World! \t ')).toBe('hello world!');
+    expect(normalizeText('Some\rText\nHere')).toBe('some text here');
+  });
+});
+
+describe('findEmailBySubject', () => {
+  const emails: Email[] = [
+    { ...mockEmail(null, null), id: '1', subject: 'Welcome to testmail' },
+    { ...mockEmail(null, null), id: '2', subject: 'Verify your\r\nemail address' },
+    { ...mockEmail(null, null), id: '3', subject: 'Invoice #1234' },
+  ];
+
+  it('finds email with exact or substring subject matching, ignoring case/newlines', () => {
+    expect(findEmailBySubject(emails, 'Welcome to testmail')?.id).toBe('1');
+    expect(findEmailBySubject(emails, 'welcome')?.id).toBe('1');
+    expect(findEmailBySubject(emails, 'Verify your email address')?.id).toBe('2');
+    expect(findEmailBySubject(emails, 'verify your\nemail')?.id).toBe('2');
+  });
+
+  it('finds email using regex matching', () => {
+    expect(findEmailBySubject(emails, /Welcome/i)?.id).toBe('1');
+    expect(findEmailBySubject(emails, /verify your email/i)?.id).toBe('2');
+    expect(findEmailBySubject(emails, /Invoice #\d+/)?.id).toBe('3');
+  });
+
+  it('returns null if subject is not found', () => {
+    expect(findEmailBySubject(emails, 'Receipt')).toBeNull();
+    expect(findEmailBySubject(emails, /Receipt/)).toBeNull();
+  });
+});
+
+describe('findEmailByText', () => {
+  const emails: Email[] = [
+    { ...mockEmail('Your activation\r\ncode is 555.', null), id: '1', subject: 'Activation' },
+    { ...mockEmail(null, '<p>Please click <b>here</b>\nto login.</p>'), id: '2', subject: 'Login Link' },
+    { ...mockEmail('Simple text', null), id: '3', subject: 'Simple Subject\r\nLine' },
+  ];
+
+  it('finds email by subject text with newlines', () => {
+    expect(findEmailByText(emails, 'Simple Subject Line')?.id).toBe('3');
+  });
+
+  it('finds email by bodyText containing newlines', () => {
+    expect(findEmailByText(emails, 'activation code is')?.id).toBe('1');
+    expect(findEmailByText(emails, 'activation\ncode')?.id).toBe('1');
+  });
+
+  it('finds email by bodyHtml containing tags and newlines', () => {
+    expect(findEmailByText(emails, 'click here to login')?.id).toBe('2');
+    expect(findEmailByText(emails, 'here\nto login')?.id).toBe('2');
+  });
+
+  it('returns null if no email matches the text', () => {
+    expect(findEmailByText(emails, 'Receipt')).toBeNull();
+  });
+});
+
 
