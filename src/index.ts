@@ -23,6 +23,8 @@ export {
   extractOtp,
   extractLinks,
   extractVerificationLink,
+  extractLinkByText,
+  hasText,
 } from './extract.js';
 
 export {

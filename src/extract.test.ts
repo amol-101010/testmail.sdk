@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractOtp, extractLinks, extractVerificationLink } from './extract.js';
+import { extractOtp, extractLinks, extractVerificationLink, extractLinkByText, hasText } from './extract.js';
 import { Email } from './types.js';
 
 const mockEmail = (bodyText: string | null, bodyHtml: string | null): Email => ({
@@ -65,3 +65,61 @@ describe('Link Extraction', () => {
     expect(extractVerificationLink(email, { domainAllowlist: ['good.com'] })).toBe('https://good.com/verify');
   });
 });
+
+describe('extractLinkByText', () => {
+  it('extracts URL by matching text inside anchor tags case-insensitively', () => {
+    const email = mockEmail(
+      null,
+      '<a href="https://example.com/reset">RESET password</a> or <a href="https://example.com/help">Help</a>'
+    );
+    expect(extractLinkByText(email, 'reset')).toBe('https://example.com/reset');
+    expect(extractLinkByText(email, 'HELP')).toBe('https://example.com/help');
+    expect(extractLinkByText(email, 'nonexistent')).toBe('');
+  });
+
+  it('handles nested HTML tags inside anchor text', () => {
+    const email = mockEmail(
+      null,
+      '<a href="https://example.com/confirm"><b>Confirm</b> your email</a>'
+    );
+    expect(extractLinkByText(email, 'confirm your email')).toBe('https://example.com/confirm');
+  });
+
+  it('extracts URL from plain text line containing the search term', () => {
+    const email = mockEmail(
+      'To verify, click this link: https://example.com/verify-me\nOtherwise ignore.',
+      null
+    );
+    expect(extractLinkByText(email, 'verify')).toBe('https://example.com/verify-me');
+  });
+
+  it('returns empty string if nothing matches', () => {
+    const email = mockEmail('Plain text body without link.', null);
+    expect(extractLinkByText(email, 'verify')).toBe('');
+  });
+});
+
+describe('hasText', () => {
+  it('detects search text inside email subject', () => {
+    const email = mockEmail('Body text', null);
+    email.subject = 'Invoice #1024';
+    expect(hasText(email, 'invoice')).toBe(true);
+    expect(hasText(email, '#1024')).toBe(true);
+    expect(hasText(email, 'receipt')).toBe(false);
+  });
+
+  it('detects search text inside bodyText', () => {
+    const email = mockEmail('Your shipping code is XYZ-987.', null);
+    expect(hasText(email, 'shipping code')).toBe(true);
+    expect(hasText(email, 'XYZ-987')).toBe(true);
+    expect(hasText(email, 'invoice')).toBe(false);
+  });
+
+  it('detects search text inside stripped bodyHtml', () => {
+    const email = mockEmail(null, '<p>Please click <b>here</b> to verify.</p>');
+    expect(hasText(email, 'click here')).toBe(true);
+    expect(hasText(email, 'verify')).toBe(true);
+    expect(hasText(email, '<b>')).toBe(false); // HTML tags are stripped
+  });
+});
+

@@ -26,7 +26,7 @@ import {
   RequestTimeoutError,
 } from './errors.js';
 import { pollForEmail } from './poller.js';
-import { extractOtp, extractVerificationLink } from './extract.js';
+import { extractOtp, extractVerificationLink, extractLinkByText, hasText } from './extract.js';
 
 // --- Deserialise raw server shapes -> SDK types --------------------------------
 
@@ -280,6 +280,41 @@ export class TestmailClient {
     });
 
     return extractedLink!;
+  }
+
+  async waitForLinkByText(
+    inboxId: string,
+    linkText: string,
+    options: WaitForEmailOptions = {}
+  ): Promise<string> {
+    const { timeout, interval, filter } = options;
+    let extractedLink = '';
+
+    const filterWrapper = (email: Email): boolean => {
+      if (filter && !filter(email)) return false;
+      const link = extractLinkByText(email, linkText);
+      if (link) {
+        extractedLink = link;
+        return true;
+      }
+      return false;
+    };
+
+    await pollForEmail(inboxId, () => this.getEmails(inboxId), {
+      timeout,
+      interval,
+      filter: filterWrapper,
+    });
+
+    return extractedLink;
+  }
+
+  extractLinkByText(email: Email, linkText: string): string {
+    return extractLinkByText(email, linkText);
+  }
+
+  hasText(email: Email, searchText: string): boolean {
+    return hasText(email, searchText);
   }
 
   async deleteInbox(inboxId: string): Promise<void> {

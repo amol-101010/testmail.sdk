@@ -95,21 +95,40 @@ if (inbox) {
 
 ---
 
-### 3. Extracting Email Body, Subject, and Attachments
-Once an email is found, you can access its textual content, metadata, or download attachments:
+### 3. Extracting Email Body, Subject, Links, and Attachments
+Once an email is found, you can access its textual content, metadata, verify text presence, or extract/download attachments and links:
 
 ```typescript
 const email = await client.waitForEmail(inbox.id, {
   filter: (e) => e.subject === 'Invoice #1024'
 });
 
-// Accessing metadata and text/HTML body
+// 1. Accessing metadata and text/HTML body
 console.log('From:', email.from);
 console.log('Subject:', email.subject);
 console.log('Text Body:', email.bodyText);
 console.log('HTML Body:', email.bodyHtml);
 
-// Accessing attachments and downloading their binary content
+// 2. Checking if a particular text exists in the email (subject or body)
+const codeExists = client.hasText(email, 'verification code');
+if (codeExists) {
+  console.log('Email contains verification code instructions.');
+}
+
+// 3. Extracting a link with particular link text
+// (Returns the URL as a string, or an empty string "" if not found)
+const paymentUrl = client.extractLinkByText(email, 'Pay Invoice');
+if (paymentUrl) {
+  console.log('Navigate here to pay:', paymentUrl);
+}
+
+// 4. Waiting directly for a link with a particular link text
+const resetUrl = await client.waitForLinkByText(inbox.id, 'Reset Password', {
+  timeout: 15_000,
+});
+console.log('Reset your password at:', resetUrl);
+
+// 5. Accessing attachments and downloading their binary content
 if (email.attachments && email.attachments.length > 0) {
   const attachment = email.attachments[0];
   console.log(`Found attachment: ${attachment.filename} (${attachment.sizeBytes} bytes)`);

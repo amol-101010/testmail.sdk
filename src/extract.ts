@@ -229,3 +229,64 @@ export function extractVerificationLink(email: Email, opts: ExtractLinkOptions =
   }
   return candidateLinks[0] || null;
 }
+
+export function extractLinkByText(email: Email, linkText: string): string {
+  const normalizedSearch = linkText.trim().toLowerCase();
+  if (!normalizedSearch) return '';
+
+  // 1. Search in HTML body first
+  if (email.bodyHtml) {
+    const anchorRegex = /<a\s+(?:[^>]*?\s+)?href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+    let match: RegExpExecArray | null;
+    while ((match = anchorRegex.exec(email.bodyHtml)) !== null) {
+      const url = match[1].trim();
+      const innerHtml = match[2];
+      const visibleText = stripHtml(innerHtml).toLowerCase();
+      if (visibleText.includes(normalizedSearch)) {
+        return decodeHtmlEntities(url);
+      }
+    }
+  }
+
+  // 2. Search in plain text body line-by-line
+  if (email.bodyText) {
+    const lines = email.bodyText.split(/\r?\n/);
+    const urlRegex = /https?:\/\/[^\s"'<>\(\)]+/gi;
+    for (const line of lines) {
+      if (line.toLowerCase().includes(normalizedSearch)) {
+        const urlMatch = line.match(urlRegex);
+        if (urlMatch && urlMatch[0]) {
+          return urlMatch[0].trim();
+        }
+      }
+    }
+  }
+
+  return '';
+}
+
+export function hasText(email: Email, searchText: string): boolean {
+  const normalizedSearch = searchText.toLowerCase();
+  if (!normalizedSearch) return false;
+
+  // Check subject
+  if (email.subject && email.subject.toLowerCase().includes(normalizedSearch)) {
+    return true;
+  }
+
+  // Check bodyText
+  if (email.bodyText && email.bodyText.toLowerCase().includes(normalizedSearch)) {
+    return true;
+  }
+
+  // Check bodyHtml (stripped of tags for clean visible text search)
+  if (email.bodyHtml) {
+    const cleanHtml = stripHtml(email.bodyHtml).toLowerCase();
+    if (cleanHtml.includes(normalizedSearch)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+

@@ -302,6 +302,45 @@ fs.writeFileSync(attachment.filename || 'attachment.bin', Buffer.from(buffer));
 
 ---
 
+### 3.13 `waitForLinkByText(inboxId, linkText, options?)`
+
+Polls the inbox until an email matching the optional filter arrives and contains a link with the specified link text (either matching anchor text or nearby plain text), then extracts and returns the URL.
+
+```typescript
+const url = await client.waitForLinkByText(inbox.id, 'Confirm Email', {
+  timeout: 10_000
+});
+console.log('Confirmation link URL:', url);
+```
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `timeout` | `number` | `30000` | Max ms to wait before throwing `TimeoutError` |
+| `interval` | `number` | `2000` | Polling cadence in ms |
+| `filter` | `(email: Email) => boolean` | — | Additional email criteria filter |
+
+---
+
+### 3.14 `extractLinkByText(email, linkText)`
+
+Synchronous utility that extracts a link URL matching a specific link text from the provided `Email` object. In HTML content, matches the anchor's visible text. In plain text, matches a line containing the target text and pulls the first URL on that line. Returns `""` (empty string) if no match is found.
+
+```typescript
+const resetUrl = client.extractLinkByText(email, 'Reset Password');
+```
+
+---
+
+### 3.15 `hasText(email, searchText)`
+
+Synchronous utility that checks if a specific text phrase exists anywhere in the email's subject, plain text body, or stripped HTML body (case-insensitive).
+
+```typescript
+const isValid = client.hasText(email, 'successful payment');
+```
+
+---
+
 ## 4. Types
 
 ```typescript
