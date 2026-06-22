@@ -7,7 +7,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { TestmailClient, Inbox } from '@testmail/sdk';
+import { TestmailClient, Inbox } from '@testmail-stream/sdk';
 
 const mail = new TestmailClient({ apiKey: process.env.TESTMAIL_API_KEY! });
 

@@ -1,4 +1,4 @@
-# @testmail/sdk
+# @testmail-stream/sdk
 
 TypeScript SDK for [testmail.stream](https://testmail.stream) — programmable
 temporary and permanent email inboxes for automated tests and workflows.
@@ -6,7 +6,7 @@ temporary and permanent email inboxes for automated tests and workflows.
 ## Install
 
 ```bash
-npm install @testmail/sdk
+npm install @testmail-stream/sdk
 ```
 
 Requires **Node ≥ 18** (uses native `fetch`). Works in ESM and CommonJS projects.
@@ -21,7 +21,7 @@ Both **Free** and **Pro** accounts receive an API key on sign-up.
 ## Quick start
 
 ```typescript
-import { TestmailClient } from '@testmail/sdk';
+import { TestmailClient } from '@testmail-stream/sdk';
 
 const client = new TestmailClient({
   apiKey: process.env.TESTMAIL_API_KEY!,
@@ -172,7 +172,7 @@ Immediately deletes the inbox and all its emails.
 
 ```typescript
 import { test, expect } from '@playwright/test';
-import { TestmailClient } from '@testmail/sdk';
+import { TestmailClient } from '@testmail-stream/sdk';
 
 const mail = new TestmailClient({ apiKey: process.env.TESTMAIL_API_KEY! });
 
@@ -212,7 +212,7 @@ test('email verification', async ({ page }) => {
 All errors extend `TestmailError` which extends `Error`.
 
 ```typescript
-import { PlanRestrictionError, QuotaExceededError } from '@testmail/sdk';
+import { PlanRestrictionError, QuotaExceededError } from '@testmail-stream/sdk';
 
 try {
   await client.createInbox({ permanent: true });

@@ -9,7 +9,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { TestmailClient, AliasConflictError } from '@testmail/sdk';
+import { TestmailClient, AliasConflictError } from '@testmail-stream/sdk';
 
 // One shared client per test file — the API key comes from the environment.
 const mail = new TestmailClient({

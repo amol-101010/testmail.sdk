@@ -1,4 +1,4 @@
-// Public surface of @testmail/sdk
+// Public surface of @testmail-stream/sdk
 // Import only what you need — everything is tree-shakeable.
 
 export { TestmailClient } from './client.js';

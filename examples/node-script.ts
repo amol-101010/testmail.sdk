@@ -7,7 +7,7 @@
  *   npx ts-node examples/node-script.ts
  */
 
-import { TestmailClient, AliasConflictError, TimeoutError } from '@testmail/sdk';
+import { TestmailClient, AliasConflictError, TimeoutError } from '@testmail-stream/sdk';
 
 const client = new TestmailClient({
   apiKey:  process.env.TESTMAIL_API_KEY ?? 'your-api-key-here',

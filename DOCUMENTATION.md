@@ -61,7 +61,7 @@ sdk/
 ### 3.1 `TestmailClient`
 
 ```typescript
-import { TestmailClient } from '@testmail/sdk';
+import { TestmailClient } from '@testmail-stream/sdk';
 
 const client = new TestmailClient({
   apiKey: 'tm_...',                    // required — from your dashboard
@@ -289,7 +289,7 @@ Usage:
 ```typescript
 import {
   ApiError, TimeoutError, PlanRestrictionError, QuotaExceededError
-} from '@testmail/sdk';
+} from '@testmail-stream/sdk';
 
 // Handling permanent inbox creation errors
 try {
@@ -369,7 +369,7 @@ Two tsconfigs:
 `package.json` exports map:
 ```json
 {
-  "name": "@testmail/sdk",
+  "name": "@testmail-stream/sdk",
   "version": "0.1.0",
   "exports": {
     ".": {
@@ -406,7 +406,7 @@ npx tsup src/index.ts --format esm,cjs --dts --clean
 ```typescript
 // tests/signup.spec.ts
 import { test, expect } from '@playwright/test';
-import { TestmailClient } from '@testmail/sdk';
+import { TestmailClient } from '@testmail-stream/sdk';
 
 const mail = new TestmailClient({ apiKey: process.env.TESTMAIL_API_KEY! });
 
@@ -438,7 +438,7 @@ test('user can verify email after signup', async ({ page }) => {
 
 ```typescript
 import { test } from '@playwright/test';
-import { TestmailClient } from '@testmail/sdk';
+import { TestmailClient } from '@testmail-stream/sdk';
 
 const mail = new TestmailClient({ apiKey: process.env.TESTMAIL_API_KEY! });
 
@@ -466,7 +466,7 @@ test.describe('email flows', () => {
 ### 8.3 Plain Node.js script
 
 ```typescript
-import { TestmailClient } from '@testmail/sdk';
+import { TestmailClient } from '@testmail-stream/sdk';
 
 const client = new TestmailClient({ apiKey: 'sk-...' });
 
@@ -507,7 +507,7 @@ npm run build          # produces dist/
 npm pack --dry-run     # verify what will be included
 
 # First release
-npm publish --access public   # if scoped: @testmail/sdk
+npm publish --access public   # if scoped: @testmail-stream/sdk
 ```
 
 `package.json` should include:
