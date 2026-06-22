@@ -11,7 +11,7 @@
 The SDK is the **primary interface** for end-users of testmail.stream.
 It wraps the Worker REST API into a clean, Promise-based class with:
 
-- API key authentication (personal `tm_` key from the user dashboard — both Free and Pro)
+- API key authentication (personal `tm_` key from the user profile page — both Free and Pro)
 - Typed request / response objects
 - A `waitForEmail()` helper that polls until a matching email arrives
   (essential for Playwright / Cypress / Jest integration tests)
@@ -64,7 +64,7 @@ sdk/
 import { TestmailClient } from '@testmail-stream/sdk';
 
 const client = new TestmailClient({
-  apiKey: 'tm_...',                    // required — from your dashboard
+  apiKey: 'tm_...',                    // required — from your profile page
   baseUrl: 'https://testmail.stream',  // optional, defaults to production
   timeout: 10_000,                     // optional, ms per individual fetch
 });
@@ -74,7 +74,7 @@ const client = new TestmailClient({
 
 | Option | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `apiKey` | `string` | ✅ | — | Personal `tm_` key from the testmail.stream dashboard. Free and Pro users both have one. |
+| `apiKey` | `string` | ✅ | — | Personal `tm_` key from the testmail.stream profile page. Free and Pro users both have one. |
 | `baseUrl` | `string` | ❌ | `https://testmail.stream` | Override for local dev / staging |
 | `timeout` | `number` | ❌ | `10000` | Per-request fetch timeout in ms |
 

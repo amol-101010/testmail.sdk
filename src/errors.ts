@@ -87,7 +87,7 @@ export class RequestTimeoutError extends TestmailError {
  */
 export class PlanRestrictionError extends ApiError {
   constructor(body: unknown) {
-    super(403, body, 'This feature requires a Pro plan. Upgrade at testmail.stream/dashboard.');
+    super(403, body, 'This feature requires a Pro plan. Upgrade at testmail.stream/profile.');
     this.name = 'PlanRestrictionError';
     Object.setPrototypeOf(this, new.target.prototype);
   }

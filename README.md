@@ -14,7 +14,7 @@ Requires **Node ≥ 18** (uses native `fetch`). Works in ESM and CommonJS projec
 ## Get an API key
 
 Sign up or request access at [testmail.stream](https://testmail.stream). Your personal API key
-(starts with `tm_`) is shown in your dashboard — copy it and store it as an environment variable.
+(starts with `tm_`) is shown on your profile page — copy it and store it as an environment variable.
 
 Both **Free** and **Pro** accounts receive an API key on sign-up.
 
@@ -47,7 +47,7 @@ await client.deleteInbox(inbox.id);
 
 ```typescript
 new TestmailClient({
-  apiKey:   'tm_...',                    // required — from your dashboard
+  apiKey:   'tm_...',                    // required — from your profile page
   baseUrl:  'https://testmail.stream',   // optional (default)
   timeout:  10_000,                      // optional ms per request
 })
