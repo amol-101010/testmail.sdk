@@ -1,6 +1,6 @@
 {
   "name": "@testmail-stream/sdk",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Official TypeScript SDK for testmail.stream — programmable temporary email inboxes",
   "author": "testmail.stream",
   "license": "MIT",
@@ -19,14 +19,14 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/types/index.d.ts",
-      "import": "./dist/esm/index.js",
-      "require": "./dist/cjs/index.cjs"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     }
   },
-  "main": "./dist/cjs/index.cjs",
-  "module": "./dist/esm/index.js",
-  "types": "./dist/types/index.d.ts",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "files": [
     "dist",
     "README.md"
