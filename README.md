@@ -43,6 +43,112 @@ console.log(email.bodyText);
 await client.deleteInbox(inbox.id);
 ```
 
+## Common Recipes & Patterns
+
+### 1. Create an Inbox and Wait for an Email
+Creating a new temporary inbox and waiting for an email to arrive is the standard flow for integration tests (e.g., signup verification):
+
+```typescript
+import { TestmailClient } from '@testmail-stream/sdk';
+
+const client = new TestmailClient({ apiKey: 'tm_your_api_key' });
+
+// 1. Create inbox
+const inbox = await client.createInbox({
+  alias: 'signup-test-flow', // unique alias
+  ttlMinutes: 30,             // auto-deletes in 30 minutes
+});
+
+console.log(`Waiting for emails sent to: ${inbox.address}`);
+
+// 2. Wait for a specific verification email
+const email = await client.waitForEmail(inbox.id, {
+  filter: (e) => e.subject?.includes('Verify') ?? false,
+});
+
+console.log('Received verification email subject:', email.subject);
+```
+
+---
+
+### 2. Connect to an Existing Inbox and Search/Filter
+If you already have an inbox or want to reconnect to a previously created one to search historical emails:
+
+```typescript
+// Look up by alias (returns null if not found or expired)
+const inbox = await client.findByAlias('signup-test-flow');
+
+if (inbox) {
+  // Option A: Retrieve all messages and search client-side
+  const emails = await client.getEmails(inbox.id);
+  const registrationEmail = emails.find(e => e.subject === 'Welcome to our platform!');
+  
+  // Option B: Retrieve using a smart lookup (alias or UUID)
+  const resolvedInbox = await client.resolve('signup-test-flow');
+  
+  // Option C: Get or create idempotently
+  const activeInbox = await client.getOrCreateInbox('signup-test-flow', {
+    ttlMinutes: 60
+  });
+}
+```
+
+---
+
+### 3. Extracting Email Body, Subject, and Attachments
+Once an email is found, you can access its textual content, metadata, or download attachments:
+
+```typescript
+const email = await client.waitForEmail(inbox.id, {
+  filter: (e) => e.subject === 'Invoice #1024'
+});
+
+// Accessing metadata and text/HTML body
+console.log('From:', email.from);
+console.log('Subject:', email.subject);
+console.log('Text Body:', email.bodyText);
+console.log('HTML Body:', email.bodyHtml);
+
+// Accessing attachments and downloading their binary content
+if (email.attachments && email.attachments.length > 0) {
+  const attachment = email.attachments[0];
+  console.log(`Found attachment: ${attachment.filename} (${attachment.sizeBytes} bytes)`);
+  
+  // Download the attachment as an ArrayBuffer
+  const buffer = await client.downloadAttachment(attachment.id);
+  
+  // Node.js: Save the file to disk
+  import * as fs from 'fs';
+  fs.writeFileSync(attachment.filename || 'attachment.bin', Buffer.from(buffer));
+}
+```
+
+---
+
+### 4. Polling & Timeout Customization
+By default, `waitForEmail` polls the inbox every **2,000 ms** and throws a `TimeoutError` if no matching email is found within **30,000 ms**. You can customize this behavior using the optional parameters:
+
+```typescript
+import { TimeoutError } from '@testmail-stream/sdk';
+
+try {
+  const email = await client.waitForEmail(inbox.id, {
+    timeout: 60_000,   // Wait for up to 60 seconds (default: 30,000 ms)
+    interval: 5_000,   // Poll every 5 seconds (default: 2,000 ms)
+    filter: (e) => e.from === 'alerts@security.com'
+  });
+  console.log('Security alert received:', email.bodyText);
+} catch (err) {
+  if (err instanceof TimeoutError) {
+    console.error('Expected alert email did not arrive within 60 seconds.');
+  } else {
+    throw err;
+  }
+}
+```
+
+---
+
 ## Client options
 
 ```typescript

@@ -222,6 +222,86 @@ await client.deleteInbox(inbox.id);
 
 ---
 
+### 3.8 `getOrCreateInbox(alias, options?)`
+
+Idempotently connects to an existing inbox by its alias, or creates a new one if it does not exist.
+
+```typescript
+const inbox = await client.getOrCreateInbox('ci-build-inbox', {
+  ttlMinutes: 120, // 2 hours
+});
+```
+
+---
+
+### 3.9 `resolve(aliasOrId)`
+
+Smart lookup that accepts either an inbox UUID or an alias string and returns the corresponding `Inbox`, or `null` if not found.
+
+```typescript
+const inboxByAlias = await client.resolve('signup-test');
+const inboxById = await client.resolve('550e8400-e29b-41d4-a716-446655440000');
+```
+
+---
+
+### 3.10 `waitForOtp(inboxId, options?)`
+
+Extends polling logic to automatically extract a One-Time Password (OTP) code from the incoming email's text or HTML body.
+
+```typescript
+const otp = await client.waitForOtp(inbox.id, {
+  timeout: 30_000,
+  length: 6,         // optional: exact length of the OTP (default: searches 4-8 digits)
+  alphanumeric: false // optional: set to true if the code contains letters (default: false)
+});
+console.log('OTP Code:', otp); // "123456"
+```
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `length` | `number` | — | Exact length of OTP code |
+| `alphanumeric` | `boolean` | `false` | Set to `true` to allow letters in the code |
+| `preferHtml` | `boolean` | `false` | Extract from HTML instead of plain text |
+| `keywords` | `string[]` | `['code', 'otp', ...]` | Keywords used to locate code proximity |
+
+---
+
+### 3.11 `waitForLink(inboxId, options?)`
+
+Extends polling logic to locate and extract a verification or magic link from the incoming email.
+
+```typescript
+const link = await client.waitForLink(inbox.id, {
+  domainAllowlist: ['myapp.com'] // optional: only match links for this domain
+});
+console.log('Clicking link:', link); // "https://myapp.com/verify?token=..."
+```
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `domainAllowlist` | `string[]` | — | Hostnames to filter allowed links |
+| `keywords` | `string[]` | `['verify', 'confirm', ...]` | Keywords used to rank match scores |
+
+---
+
+### 3.12 `downloadAttachment(attachmentId)`
+
+Downloads the binary contents of an email attachment. Returns an `ArrayBuffer`.
+
+```typescript
+const attachment = email.attachments[0];
+const buffer = await client.downloadAttachment(attachment.id);
+
+// Node.js example: save file to local disk
+import * as fs from 'fs';
+fs.writeFileSync(attachment.filename || 'attachment.bin', Buffer.from(buffer));
+```
+
+**Worker route:** `GET /attachment/:id`
+
+---
+
 ## 4. Types
 
 ```typescript
