@@ -46,6 +46,24 @@ export interface Attachment {
   createdAt: Date;
 }
 
+/** RFC 8601 method-result token; null when the method was absent/unparseable. */
+export type AuthVerdict =
+  | 'pass'
+  | 'fail'
+  | 'softfail'
+  | 'neutral'
+  | 'none'
+  | 'temperror'
+  | 'permerror'
+  | 'policy';
+
+/** Parsed email-authentication verdicts from the Authentication-Results header. */
+export interface EmailAuth {
+  spf: AuthVerdict | null;
+  dkim: AuthVerdict | null;
+  dmarc: AuthVerdict | null;
+}
+
 export interface Email {
   id: string;
   inboxId: string;
@@ -56,6 +74,8 @@ export interface Email {
   rawSize: number | null;
   receivedAt: Date;
   attachments?: Attachment[];
+  /** SPF/DKIM/DMARC verdicts. Fields are null when not reported for the message. */
+  auth: EmailAuth;
 }
 
 // --- Request option types ------------------------------------------------------
@@ -204,5 +224,8 @@ export interface RawMessage {
   body_html: string | null;
   raw_size: number | null;
   received_at: string;
+  spf?: string | null;
+  dkim?: string | null;
+  dmarc?: string | null;
   attachments?: RawAttachment[];
 }

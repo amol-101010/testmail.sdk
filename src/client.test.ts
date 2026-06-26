@@ -168,6 +168,50 @@ describe('searchEmails', () => {
   });
 });
 
+describe('auth verdict mapping', () => {
+  const rawMsg = (extra: Record<string, unknown>) => ({
+    id: 'm1', inbox_id: 'ib', from_addr: 'x@y.com', subject: 'hi',
+    body_text: 't', body_html: null, raw_size: 5, received_at: '2026-01-01T00:00:00Z',
+    ...extra,
+  });
+
+  it('maps spf/dkim/dmarc onto email.auth', async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      resp(200, [rawMsg({ spf: 'pass', dkim: 'PASS', dmarc: 'fail' })])
+    );
+    vi.stubGlobal('fetch', fetch);
+    const [email] = await client().getEmails('ib');
+    expect(email.auth).toEqual({ spf: 'pass', dkim: 'pass', dmarc: 'fail' });
+  });
+
+  it('defaults missing/unknown verdicts to null', async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      resp(200, [rawMsg({ spf: 'bogus' })]) // dkim/dmarc absent, spf invalid
+    );
+    vi.stubGlobal('fetch', fetch);
+    const [email] = await client().getEmails('ib');
+    expect(email.auth).toEqual({ spf: null, dkim: null, dmarc: null });
+  });
+
+  it('authPassed: true when all reported verdicts pass (nulls ignored)', () => {
+    const c = client();
+    const base: any = { auth: { spf: 'pass', dkim: 'pass', dmarc: null } };
+    expect(c.authPassed(base)).toBe(true);
+  });
+
+  it('authPassed: false when any reported verdict fails', () => {
+    const c = client();
+    expect(c.authPassed({ auth: { spf: 'pass', dkim: 'fail', dmarc: null } } as any)).toBe(false);
+  });
+
+  it('authPassed: require list insists a method is present and passing', () => {
+    const c = client();
+    // dmarc not reported -> required -> false
+    expect(c.authPassed({ auth: { spf: 'pass', dkim: 'pass', dmarc: null } } as any, ['dmarc'])).toBe(false);
+    expect(c.authPassed({ auth: { spf: 'pass', dkim: 'pass', dmarc: 'pass' } } as any, ['dmarc'])).toBe(true);
+  });
+});
+
 describe('downloadAttachment', () => {
   it('returns bytes plus content-type and parsed filename', async () => {
     const fetch = vi.fn().mockResolvedValue(

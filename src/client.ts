@@ -19,6 +19,7 @@ import {
   AttachmentDownload,
   Attachment,
   RawAttachment,
+  AuthVerdict,
 } from './types.js';
 import {
   AliasConflictError,
@@ -128,6 +129,16 @@ function toAttachment(raw: RawAttachment): Attachment {
   };
 }
 
+const AUTH_VERDICTS = new Set([
+  'pass', 'fail', 'softfail', 'neutral', 'none', 'temperror', 'permerror', 'policy',
+]);
+
+function toVerdict(v: string | null | undefined): AuthVerdict | null {
+  if (!v) return null;
+  const t = v.toLowerCase();
+  return AUTH_VERDICTS.has(t) ? (t as AuthVerdict) : null;
+}
+
 function toEmail(raw: RawMessage): Email {
   return {
     id:          raw.id,
@@ -139,6 +150,11 @@ function toEmail(raw: RawMessage): Email {
     rawSize:     raw.raw_size,
     receivedAt:  new Date(raw.received_at),
     attachments: raw.attachments?.map(toAttachment),
+    auth: {
+      spf:   toVerdict(raw.spf),
+      dkim:  toVerdict(raw.dkim),
+      dmarc: toVerdict(raw.dmarc),
+    },
   };
 }
 
@@ -442,6 +458,21 @@ export class TestmailClient {
 
   hasText(email: Email, searchText: string): boolean {
     return hasText(email, searchText);
+  }
+
+  /**
+   * True only if every *reported* auth verdict on the email is `pass`.
+   * Methods that weren't reported (null) are ignored. With `require`, you can
+   * insist specific methods are present AND pass, e.g.
+   * `client.authPassed(email, ['spf', 'dkim'])`.
+   */
+  authPassed(email: Email, require: Array<'spf' | 'dkim' | 'dmarc'> = []): boolean {
+    const a = email.auth;
+    for (const m of require) {
+      if (a[m] !== 'pass') return false;
+    }
+    const verdicts: Array<AuthVerdict | null> = [a.spf, a.dkim, a.dmarc];
+    return verdicts.every((v) => v === null || v === 'pass');
   }
 
   findEmailBySubject(emails: Email[], subject: string | RegExp): Email | null {
