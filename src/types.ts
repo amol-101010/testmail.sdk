@@ -43,7 +43,6 @@ export interface Attachment {
   sizeBytes: number;
   contentId: string | null;
   isInline: boolean;
-  storageKey: string;
   createdAt: Date;
 }
 
@@ -192,7 +191,7 @@ export interface RawAttachment {
   size_bytes: number;
   content_id: string | null;
   is_inline: boolean;
-  storage_key: string;
+  storage_key?: string;
   created_at: string;
 }
 

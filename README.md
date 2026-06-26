@@ -144,17 +144,24 @@ const resetUrl = await client.waitForLinkByText(inbox.id, 'Reset Password', {
 });
 console.log('Reset your password at:', resetUrl);
 
-// 5. Accessing attachments and downloading their binary content
+// 5. Accessing and downloading attachments
+// Option A: Look up and download directly by filename
+try {
+  const file = await client.downloadAttachmentByFilename(email, 'invoice.pdf');
+  console.log(`Downloaded ${file.filename} (${file.data.byteLength} bytes)`);
+} catch (err: any) {
+  console.error('Download failed:', err.message);
+}
+
+// Option B: Node.js helper to save an attachment directly to disk
+import { saveAttachment } from '@testmail-stream/sdk/node';
+
 if (email.attachments && email.attachments.length > 0) {
   const attachment = email.attachments[0];
-  console.log(`Found attachment: ${attachment.filename} (${attachment.sizeBytes} bytes)`);
   
-  // Download the attachment (bytes + content type + filename)
-  const file = await client.downloadAttachment(attachment.id);
-  
-  // Node.js: Save the file to disk
-  import * as fs from 'fs';
-  fs.writeFileSync(file.filename || attachment.filename || 'attachment.bin', Buffer.from(file.data));
+  // Saves the attachment to the specified folder (resolving its filename automatically)
+  const savedPath = await saveAttachment(client, attachment.id, './downloads');
+  console.log(`Attachment saved to: ${savedPath}`);
 }
 ```
 

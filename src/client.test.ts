@@ -184,3 +184,62 @@ describe('downloadAttachment', () => {
     expect(String(fetch.mock.calls[0][0])).toBe('https://api.test/attachment/att1');
   });
 });
+
+describe('downloadAttachmentByFilename', () => {
+  const sampleEmail = (attachments?: any[]) => ({
+    id: 'msg1',
+    inboxId: 'ib1',
+    from: 'x@y.com',
+    subject: 'test',
+    bodyText: 'body',
+    bodyHtml: null,
+    rawSize: 100,
+    receivedAt: new Date(),
+    attachments,
+  }) as any;
+
+  it('downloads the attachment when a unique match is found', async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      resp(200, 'PDFDATA', {
+        'content-type': 'application/pdf',
+        'content-disposition': 'attachment; filename="report.pdf"',
+      })
+    );
+    vi.stubGlobal('fetch', fetch);
+
+    const email = sampleEmail([
+      { id: 'att1', filename: 'report.pdf' },
+      { id: 'att2', filename: 'other.png' },
+    ]);
+
+    const out = await client().downloadAttachmentByFilename(email, 'report.pdf');
+    expect(out.filename).toBe('report.pdf');
+    expect(String(fetch.mock.calls[0][0])).toBe('https://api.test/attachment/att1');
+  });
+
+  it('throws error when attachments metadata is not loaded', async () => {
+    const email = sampleEmail(undefined);
+    await expect(client().downloadAttachmentByFilename(email, 'report.pdf')).rejects.toThrow(
+      /attachments not loaded/
+    );
+  });
+
+  it('throws error when no matching attachment is found', async () => {
+    const email = sampleEmail([
+      { id: 'att2', filename: 'other.png' },
+    ]);
+    await expect(client().downloadAttachmentByFilename(email, 'report.pdf')).rejects.toThrow(
+      /No attachment named "report.pdf"/
+    );
+  });
+
+  it('throws error when multiple matching attachments are found', async () => {
+    const email = sampleEmail([
+      { id: 'att1', filename: 'report.pdf' },
+      { id: 'att2', filename: 'report.pdf' },
+    ]);
+    await expect(client().downloadAttachmentByFilename(email, 'report.pdf')).rejects.toThrow(
+      /Ambiguous: 2 attachments named "report.pdf"/
+    );
+  });
+});

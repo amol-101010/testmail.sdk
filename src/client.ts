@@ -124,7 +124,6 @@ function toAttachment(raw: RawAttachment): Attachment {
     sizeBytes:   raw.size_bytes,
     contentId:   raw.content_id,
     isInline:    raw.is_inline,
-    storageKey:  raw.storage_key,
     createdAt:   new Date(raw.created_at),
   };
 }
@@ -522,10 +521,30 @@ export class TestmailClient {
       this.throwForResponse(response.status, response.statusText, parsed);
     }
 
+    // NOTE: Streaming is intentionally deferred while the 25MB cap holds. Entire file is buffered.
     return {
       data: await response.arrayBuffer(),
       contentType: response.headers.get('content-type'),
       filename: parseContentDispositionFilename(response.headers.get('content-disposition')),
     };
+  }
+
+  /**
+   * Helper to download an attachment by filename, searching within a loaded Email object.
+   * Throws an error if attachments metadata is not loaded, if no attachment matches,
+   * or if multiple attachments match the name (ambiguous matches).
+   */
+  async downloadAttachmentByFilename(email: Email, name: string): Promise<AttachmentDownload> {
+    if (!email.attachments) {
+      throw new Error('Email attachments not loaded; fetch the email with attachment metadata first.');
+    }
+    const matches = email.attachments.filter(a => a.filename === name);
+    if (matches.length === 0) {
+      throw new Error(`No attachment named "${name}"`);
+    }
+    if (matches.length > 1) {
+      throw new Error(`Ambiguous: ${matches.length} attachments named "${name}"`);
+    }
+    return this.downloadAttachment(matches[0].id);
   }
 }
