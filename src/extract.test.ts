@@ -21,6 +21,7 @@ const mockEmail = (bodyText: string | null, bodyHtml: string | null): Email => (
   bodyHtml,
   rawSize: 100,
   receivedAt: new Date(),
+  auth: { spf: null, dkim: null, dmarc: null },
 });
 
 describe('OTP Extraction', () => {
