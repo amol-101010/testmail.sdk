@@ -12,6 +12,7 @@ const email = (id: string): Email => ({
   bodyHtml: null,
   rawSize: 1,
   receivedAt: new Date(),
+  auth: { spf: null, dkim: null, dmarc: null },
 });
 
 afterEach(() => {
