@@ -84,7 +84,7 @@ export interface CreateInboxOptions {
   alias?: string;
   ttlMinutes?: number;
   permanent?: boolean;
-  /** Attach inbox to a team; address becomes {teamSlug}-{prefix}@domain. */
+  /** Attach inbox to a team; address becomes {prefix}@{teamSlug}.domain. */
   teamId?: string;
 }
 
