@@ -250,6 +250,65 @@ describe('getEmailsLastHour', () => {
   });
 });
 
+describe('email deserialization — newline + whitespace normalization', () => {
+  // Helper: build a minimal raw server message
+  const rawMsg = (subject: string | null, from_addr: string | null = 'x@y.com') => ([{
+    id: 'm1', inbox_id: 'ib', from_addr,
+    subject, body_text: 't', body_html: null, raw_size: 5,
+    received_at: '2026-01-01T00:00:00Z',
+  }]);
+
+  it('strips leading and trailing newlines from subject', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, rawMsg('\n[Showrunnr] TV Only shared Note with you\n'))));
+    const [email] = await client().getEmails('ib');
+    expect(email.subject).toBe('[Showrunnr] TV Only shared Note with you');
+  });
+
+  it('collapses internal \\r\\n in subject to a single space', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, rawMsg('Verify your\r\nemail address'))));
+    const [email] = await client().getEmails('ib');
+    expect(email.subject).toBe('Verify your email address');
+  });
+
+  it('handles subject with special chars, quotes and ellipsis alongside newlines', async () => {
+    const raw = '\n[Showrunnr] TV Only shared Note \u201csolus suggero solio\u2026\u201d with you\n';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, rawMsg(raw))));
+    const [email] = await client().getEmails('ib');
+    // Leading/trailing newlines stripped; curly quotes and ellipsis preserved
+    expect(email.subject).toBe('[Showrunnr] TV Only shared Note \u201csolus suggero solio\u2026\u201d with you');
+    // findEmailBySubject string match works on the clean subject
+    expect(client().findEmailBySubject([email], '[Showrunnr]')).toBe(email);
+    // findEmailBySubject regex match works too
+    expect(client().findEmailBySubject([email], /\[Showrunnr\]/)).toBe(email);
+  });
+
+  it('trims leading/trailing whitespace from the from address', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, rawMsg('Hi', '  no-reply@showrunnr.com  '))));
+    const [email] = await client().getEmails('ib');
+    expect(email.from).toBe('no-reply@showrunnr.com');
+  });
+
+  it('leaves subject as null when server sends null', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, rawMsg(null))));
+    const [email] = await client().getEmails('ib');
+    expect(email.subject).toBeNull();
+  });
+
+  it('waitForEmail filter receives clean subject (no leading \\n)', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      resp(200, rawMsg('\n[Showrunnr] TV Only shared Note with you\n'))
+    ));
+    // Filter uses startsWith — would fail on raw '\n[Showrunnr]...' but passes on normalized
+    const p = client().waitForEmail('ib', {
+      filter: e => (e.subject ?? '').startsWith('[Showrunnr]'),
+    });
+    await vi.advanceTimersByTimeAsync(3000);
+    const email = await p;
+    expect(email.subject).toBe('[Showrunnr] TV Only shared Note with you');
+  });
+});
+
 describe('auth verdict mapping', () => {
   const rawMsg = (extra: Record<string, unknown>) => ({
     id: 'm1', inbox_id: 'ib', from_addr: 'x@y.com', subject: 'hi',

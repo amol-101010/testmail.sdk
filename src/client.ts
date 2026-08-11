@@ -37,6 +37,7 @@ import {
   hasText,
   findEmailBySubject,
   findEmailByText,
+  normalizeWhitespace,
 } from './extract.js';
 
 // --- Internal helpers ----------------------------------------------------------
@@ -143,8 +144,13 @@ function toEmail(raw: RawMessage): Email {
   return {
     id:          raw.id,
     inboxId:     raw.inbox_id,
-    from:        raw.from_addr,
-    subject:     raw.subject,
+    // Normalize subject: collapse embedded \r\n to spaces and trim leading/trailing
+    // whitespace. Servers occasionally send subjects with leading newlines or
+    // CRLF-folded header continuations; normalizing here means every downstream
+    // method — findEmailBySubject, hasText, waitForEmail filters, etc. — sees
+    // clean data without callers needing to handle it themselves.
+    from:        raw.from_addr?.trim() ?? null,
+    subject:     raw.subject != null ? normalizeWhitespace(raw.subject) : null,
     bodyText:    raw.body_text,
     bodyHtml:    raw.body_html,
     rawSize:     raw.raw_size,
