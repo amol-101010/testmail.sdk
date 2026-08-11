@@ -166,6 +166,64 @@ describe('searchEmails', () => {
     expect(page.emails[0].from).toBe('x@y.com');
     expect(page.emails[0].receivedAt).toBeInstanceOf(Date);
   });
+
+  it('correctly encodes a subject with special characters (brackets, quotes)', async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      resp(200, { messages: [], nextCursor: null })
+    );
+    vi.stubGlobal('fetch', fetch);
+    const specialSubject = '[Showrunnr] TV Only shared Note "solus suggero" with you';
+    await client().searchEmails('ib', { subject: specialSubject });
+    const url = String(fetch.mock.calls[0][0]);
+    // URLSearchParams must have encoded the subject
+    expect(url).toContain('subject=');
+    // URLSearchParams encodes spaces as '+'; decode both '+' and percent-encoded chars
+    const rawParam = url.split('subject=')[1].split('&')[0];
+    const decoded = decodeURIComponent(rawParam.replace(/\+/g, ' '));
+    expect(decoded).toBe(specialSubject);
+  });
+});
+
+describe('getEmailsToday', () => {
+  it('calls searchEmails with since=startOfToday and limit=200', async () => {
+    const now = new Date('2026-06-15T14:30:00Z');
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    const fetch = vi.fn().mockResolvedValue(
+      resp(200, { messages: [], nextCursor: null })
+    );
+    vi.stubGlobal('fetch', fetch);
+
+    await client().getEmailsToday('ib');
+    const url = String(fetch.mock.calls[0][0]);
+    expect(url).toContain('paginate=true');
+    expect(url).toContain('limit=200');
+    // since should be midnight local time — just verify it's present
+    expect(url).toContain('since=');
+  });
+});
+
+describe('getEmailsLastHour', () => {
+  it('calls searchEmails with since=1 hour ago and limit=200', async () => {
+    const now = new Date('2026-06-15T14:30:00Z');
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    const fetch = vi.fn().mockResolvedValue(
+      resp(200, { messages: [], nextCursor: null })
+    );
+    vi.stubGlobal('fetch', fetch);
+
+    await client().getEmailsLastHour('ib');
+    const url = String(fetch.mock.calls[0][0]);
+    expect(url).toContain('paginate=true');
+    expect(url).toContain('limit=200');
+    const sinceParam = decodeURIComponent(url.split('since=')[1].split('&')[0]);
+    const sinceDate = new Date(sinceParam);
+    // Should be approximately 1 hour before now
+    expect(now.getTime() - sinceDate.getTime()).toBeCloseTo(60 * 60 * 1000, -3);
+  });
 });
 
 describe('auth verdict mapping', () => {

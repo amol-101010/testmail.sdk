@@ -349,8 +349,33 @@ export class TestmailClient {
   }
 
   /**
+   * Fetch emails received since the start of today (midnight local time),
+   * newest first, up to 200. Uses server-side `since` filtering.
+   */
+  async getEmailsToday(inboxId: string): Promise<Email[]> {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const { emails } = await this.searchEmails(inboxId, { since: startOfToday, limit: 200 });
+    return emails;
+  }
+
+  /**
+   * Fetch emails received in the last 60 minutes, newest first, up to 200.
+   * Uses server-side `since` filtering.
+   */
+  async getEmailsLastHour(inboxId: string): Promise<Email[]> {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const { emails } = await this.searchEmails(inboxId, { since: oneHourAgo, limit: 200 });
+    return emails;
+  }
+
+  /**
    * Search/filter emails server-side with cursor pagination. Returns one page
    * of results plus a `nextCursor` (null when there are no more pages).
+   *
+   * The `subject` filter accepts any string including special characters such
+   * as brackets `[]`, quotes `"`, and unicode — they are safely encoded before
+   * being sent to the server.
    */
   async searchEmails(inboxId: string, options: SearchEmailsOptions = {}): Promise<EmailPage> {
     const params = new URLSearchParams();
@@ -358,7 +383,12 @@ export class TestmailClient {
     params.set('paginate', 'true');
     if (options.query)         params.set('q', options.query);
     if (options.from)          params.set('from', options.from);
-    if (options.subject)       params.set('subject', options.subject);
+    // Subject strings may contain special characters (brackets, quotes, etc.).
+    // URLSearchParams.set() handles percent-encoding, so we pass the raw value
+    // directly — no additional escaping is needed or wanted here.
+    if (options.subject != null && options.subject !== '') {
+      params.set('subject', options.subject);
+    }
     if (options.since)         params.set('since', toIso(options.since));
     if (options.until)         params.set('until', toIso(options.until));
     if (options.hasAttachment) params.set('hasAttachment', 'true');

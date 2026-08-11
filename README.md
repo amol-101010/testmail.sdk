@@ -93,6 +93,8 @@ if (inbox) {
   
   // Find a specific email in the array by its subject (resilient to line breaks/case)
   const registrationEmail = client.findEmailBySubject(emails, 'Welcome to our platform!');
+  // Subjects with special characters (brackets, quotes, etc.) are matched correctly:
+  const sharedNote = client.findEmailBySubject(emails, '[Showrunnr] TV Only shared Note');
   // Or using a regular expression:
   const verifyEmail = client.findEmailBySubject(emails, /Verify your email/i);
   
@@ -106,6 +108,12 @@ if (inbox) {
   const activeInbox = await client.getOrCreateInbox('signup-test-flow', {
     ttlMinutes: 60
   });
+
+  // Option D: Fetch only today's emails (since midnight local time)
+  const todaysEmails = await client.getEmailsToday(inbox.id);
+
+  // Option E: Fetch only emails from the last hour
+  const recentEmails = await client.getEmailsLastHour(inbox.id);
 }
 ```
 
@@ -304,7 +312,7 @@ Returns all active inboxes owned by your API key.
 
 ### `getEmails(inboxId)`
 
-Returns all emails received by the inbox, newest first.
+Returns all emails received by the inbox, newest first (up to 200).
 
 ```typescript
 const emails = await client.getEmails(inbox.id);
@@ -312,9 +320,31 @@ const emails = await client.getEmails(inbox.id);
 
 ---
 
+### `getEmailsToday(inboxId)`
+
+Returns emails received since midnight **local time** today, newest first (up to 200). Ideal for daily monitoring scripts or CI pipelines that only care about same-day emails.
+
+```typescript
+const todaysEmails = await client.getEmailsToday(inbox.id);
+```
+
+---
+
+### `getEmailsLastHour(inboxId)`
+
+Returns emails received in the last **60 minutes**, newest first (up to 200). Useful for narrowing down recent activity without fetching the full inbox history.
+
+```typescript
+const recentEmails = await client.getEmailsLastHour(inbox.id);
+```
+
+---
+
 ### `searchEmails(inboxId, options?)`
 
 Server-side search, filtering, and cursor pagination. Returns one page of emails plus a `nextCursor` (`null` when there are no more pages). Use this instead of `getEmails` for busy inboxes (which returns at most 200) or when you need filtering.
+
+The `subject` option supports **any string including special characters** — brackets `[]`, double quotes `"`, hash `#`, unicode, ellipsis `…`, and so on are all safely encoded before the request is sent.
 
 ```typescript
 // First page of matching emails
@@ -325,6 +355,11 @@ const page = await client.searchEmails(inbox.id, {
   since:         new Date(Date.now() - 86_400_000), // Date or ISO string
   hasAttachment: true,
   limit:         50,                 // server caps at 200 (default 50)
+});
+
+// Works with special-character subjects too:
+const page2 = await client.searchEmails(inbox.id, {
+  subject: '[Showrunnr] TV Only shared Note "solus" with you',
 });
 
 console.log(page.emails.length, page.nextCursor);
