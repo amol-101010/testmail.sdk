@@ -168,9 +168,10 @@ const inbox = await client.getInbox('550e8400-...');
 
 ---
 
-### 3.5 `getEmails(inboxId, options?)`
+### 3.5 `getEmails(inboxId)`
 
-Returns all emails received by the inbox so far.
+Returns all emails received by the inbox so far, newest first (server cap: **200**).
+For filtered access or paging beyond 200, use `searchEmails()` instead.
 
 ```typescript
 const emails = await client.getEmails(inbox.id);
@@ -192,14 +193,44 @@ const emails = await client.getEmails(inbox.id);
 
 **Worker route:** `GET /inboxes/:id/messages`
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `page` | `number` | `1` | Page number |
-| `perPage` | `number` | `20` | Items per page (max 100) |
+---
+
+### 3.6 `getEmailsToday(inboxId)`
+
+Convenience wrapper around `searchEmails()` that returns emails received since **midnight local time** today, newest first (up to 200). Useful for daily monitoring scripts or CI pipelines that only care about same-day emails.
+
+```typescript
+const todaysEmails = await client.getEmailsToday(inbox.id);
+// todaysEmails: Email[]
+```
+
+Internally equivalent to:
+```typescript
+const startOfToday = new Date();
+startOfToday.setHours(0, 0, 0, 0);
+client.searchEmails(inboxId, { since: startOfToday, limit: 200 });
+```
 
 ---
 
-### 3.6 `waitForEmail(inboxId, options?)`
+### 3.7 `getEmailsLastHour(inboxId)`
+
+Convenience wrapper around `searchEmails()` that returns emails received in the last **60 minutes**, newest first (up to 200). Useful for narrowing down recent activity without fetching full inbox history.
+
+```typescript
+const recentEmails = await client.getEmailsLastHour(inbox.id);
+// recentEmails: Email[]
+```
+
+Internally equivalent to:
+```typescript
+const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+client.searchEmails(inboxId, { since: oneHourAgo, limit: 200 });
+```
+
+---
+
+### 3.8 `waitForEmail(inboxId, options?)`
 
 The **killer feature** for test automation. Polls `getEmails()` on an interval
 until at least one email matches the predicate, or the timeout elapses.
@@ -225,7 +256,7 @@ const email = await client.waitForEmail(inbox.id, {
 
 ---
 
-### 3.7 `deleteInbox(inboxId)`
+### 3.9 `deleteInbox(inboxId)`
 
 Immediately deletes the inbox and all its emails.
 Useful in `afterEach` teardown to keep the system clean.
@@ -238,7 +269,7 @@ await client.deleteInbox(inbox.id);
 
 ---
 
-### 3.8 `getOrCreateInbox(alias, options?)`
+### 3.10 `getOrCreateInbox(alias, options?)`
 
 Idempotently connects to an existing inbox by its alias, or creates a new one if it does not exist.
 
@@ -250,7 +281,7 @@ const inbox = await client.getOrCreateInbox('ci-build-inbox', {
 
 ---
 
-### 3.9 `resolve(aliasOrId)`
+### 3.11 `resolve(aliasOrId)`
 
 Smart lookup that accepts either an inbox UUID or an alias string and returns the corresponding `Inbox`, or `null` if not found.
 
@@ -261,7 +292,7 @@ const inboxById = await client.resolve('550e8400-e29b-41d4-a716-446655440000');
 
 ---
 
-### 3.10 `waitForOtp(inboxId, options?)`
+### 3.12 `waitForOtp(inboxId, options?)`
 
 Extends polling logic to automatically extract a One-Time Password (OTP) code from the incoming email's text or HTML body.
 
@@ -283,7 +314,7 @@ console.log('OTP Code:', otp); // "123456"
 
 ---
 
-### 3.11 `waitForLink(inboxId, options?)`
+### 3.13 `waitForLink(inboxId, options?)`
 
 Extends polling logic to locate and extract a verification or magic link from the incoming email.
 
@@ -301,7 +332,7 @@ console.log('Clicking link:', link); // "https://myapp.com/verify?token=..."
 
 ---
 
-### 3.12 `downloadAttachment(attachmentId)`
+### 3.14 `downloadAttachment(attachmentId)`
 
 Downloads an email attachment. Returns `{ data: ArrayBuffer, contentType: string | null, filename: string | null }`. Shares the client's timeout + automatic-retry transport.
 
@@ -318,7 +349,7 @@ fs.writeFileSync(file.filename || attachment.filename || 'attachment.bin', Buffe
 
 ---
 
-### 3.13 `waitForLinkByText(inboxId, linkText, options?)`
+### 3.15 `waitForLinkByText(inboxId, linkText, options?)`
 
 Polls the inbox until an email matching the optional filter arrives and contains a link with the specified link text (either matching anchor text or nearby plain text), then extracts and returns the URL.
 
@@ -337,7 +368,7 @@ console.log('Confirmation link URL:', url);
 
 ---
 
-### 3.14 `extractLinkByText(email, linkText)`
+### 3.16 `extractLinkByText(email, linkText)`
 
 Synchronous utility that extracts a link URL matching a specific link text from the provided `Email` object. In HTML content, matches the anchor's visible text. In plain text, matches a line containing the target text and pulls the first URL on that line. Returns `""` (empty string) if no match is found.
 
@@ -347,7 +378,7 @@ const resetUrl = client.extractLinkByText(email, 'Reset Password');
 
 ---
 
-### 3.15 `hasText(email, searchText)`
+### 3.17 `hasText(email, searchText)`
 
 Synchronous utility that checks if a specific text phrase exists anywhere in the email's subject, plain text body, or stripped HTML body (case-insensitive). Note that all search/filtering operations collapse and strip line breaks and carriage returns to ensure match robustness against line wraps.
 
@@ -357,21 +388,30 @@ const isValid = client.hasText(email, 'successful payment');
 
 ---
 
-### 3.16 `findEmailBySubject(emails, subject)`
+### 3.18 `findEmailBySubject(emails, subject)`
 
 Synchronous utility that searches an array of `Email` objects and returns the first email matching the given `subject` string or `RegExp`. Matching is resilient to line wraps and collapses carriage returns and newlines to spaces prior to matching. String matching is case-insensitive. RegExp matching tests against the original case of the subject with line breaks normalized.
+
+**Special characters are fully supported** — brackets `[]`, quotes `"`, hash `#`, unicode, and ellipsis `…` all work correctly with both plain-string and RegExp matching.
 
 ```typescript
 // Look up in an array of emails by subject string
 const matchString = client.findEmailBySubject(emails, 'Verify Your Email');
 
+// Special characters work without any escaping:
+const sharedNote = client.findEmailBySubject(
+  emails,
+  '[Showrunnr] TV Only shared Note "solus suggero" with you'
+);
+
 // Look up in an array of emails by regular expression
-const matchRegex = client.findEmailBySubject(emails, /Verify Your/i);
+// (escape brackets in regex as usual: \[ \])
+const matchRegex = client.findEmailBySubject(emails, /\[Showrunnr\]/i);
 ```
 
 ---
 
-### 3.17 `findEmailByText(emails, text)`
+### 3.19 `findEmailByText(emails, text)`
 
 Synchronous utility that searches an array of `Email` objects and returns the first email whose subject or body contains the specified `text`. Matching is case-insensitive and resilient to line wraps (collapsing newlines and carriage returns to spaces in both the search query and email fields).
 
@@ -382,7 +422,7 @@ const invoiceEmail = client.findEmailByText(emails, 'successful payment invoice 
 
 ---
 
-### 3.18 `normalizeWhitespace(str)` and `normalizeText(str)`
+### 3.20 `normalizeWhitespace(str)` and `normalizeText(str)`
 
 Synchronous utilities to clean up strings prior to custom matches.
 - `normalizeWhitespace(str)` collapses carriage returns, newlines, and consecutive whitespace into standard single spaces and trims the result, preserving letter casing.

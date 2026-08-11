@@ -179,6 +179,32 @@ describe('findEmailBySubject', () => {
     expect(findEmailBySubject(emails, 'Receipt')).toBeNull();
     expect(findEmailBySubject(emails, /Receipt/)).toBeNull();
   });
+
+  it('matches subjects containing special characters (brackets, quotes, ellipsis)', () => {
+    const specialEmails: Email[] = [
+      {
+        ...mockEmail(null, null),
+        id: '10',
+        subject: '[Showrunnr] TV Only shared Note "solus suggero solio totus ante averto aedificium sufficio a…" with you',
+      },
+      {
+        ...mockEmail(null, null),
+        id: '11',
+        subject: 'Re: [Support #42] Your ticket has been updated',
+      },
+    ];
+
+    // Substring match with brackets
+    expect(findEmailBySubject(specialEmails, '[Showrunnr]')?.id).toBe('10');
+    // Full subject (with quotes and ellipsis)
+    expect(
+      findEmailBySubject(specialEmails, '[Showrunnr] TV Only shared Note')?.id
+    ).toBe('10');
+    // Support ticket with brackets and hash
+    expect(findEmailBySubject(specialEmails, '[Support #42]')?.id).toBe('11');
+    // Regex variant still works
+    expect(findEmailBySubject(specialEmails, /\[Showrunnr\]/)?.id).toBe('10');
+  });
 });
 
 describe('findEmailByText', () => {
