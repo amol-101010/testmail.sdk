@@ -182,6 +182,30 @@ describe('searchEmails', () => {
     const decoded = decodeURIComponent(rawParam.replace(/\+/g, ' '));
     expect(decoded).toBe(specialSubject);
   });
+
+  it('collapses \\r\\n in subject to a single space before sending to server', async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      resp(200, { messages: [], nextCursor: null })
+    );
+    vi.stubGlobal('fetch', fetch);
+    await client().searchEmails('ib', { subject: 'Verify your\r\nemail address' });
+    const url = String(fetch.mock.calls[0][0]);
+    const rawParam = url.split('subject=')[1].split('&')[0];
+    const decoded = decodeURIComponent(rawParam.replace(/\+/g, ' '));
+    expect(decoded).toBe('Verify your email address');
+  });
+
+  it('collapses \\n in query to a single space before sending to server', async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      resp(200, { messages: [], nextCursor: null })
+    );
+    vi.stubGlobal('fetch', fetch);
+    await client().searchEmails('ib', { query: 'invoice\npayment' });
+    const url = String(fetch.mock.calls[0][0]);
+    const rawParam = url.split('q=')[1].split('&')[0];
+    const decoded = decodeURIComponent(rawParam.replace(/\+/g, ' '));
+    expect(decoded).toBe('invoice payment');
+  });
 });
 
 describe('getEmailsToday', () => {

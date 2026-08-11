@@ -381,13 +381,17 @@ export class TestmailClient {
     const params = new URLSearchParams();
     // Force the server's paginated response shape even with no other filters.
     params.set('paginate', 'true');
-    if (options.query)         params.set('q', options.query);
-    if (options.from)          params.set('from', options.from);
-    // Subject strings may contain special characters (brackets, quotes, etc.).
-    // URLSearchParams.set() handles percent-encoding, so we pass the raw value
-    // directly — no additional escaping is needed or wanted here.
+
+    // Normalize string params: collapse \r\n / \n to spaces so that copy-pasted
+    // subjects or queries with embedded newlines produce a valid server query.
+    const norm = (s: string) => s.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+    if (options.query)   params.set('q',    norm(options.query));
+    if (options.from)    params.set('from', norm(options.from));
+    // Subject strings may also contain special characters (brackets, quotes, etc.).
+    // URLSearchParams.set() handles percent-encoding automatically.
     if (options.subject != null && options.subject !== '') {
-      params.set('subject', options.subject);
+      params.set('subject', norm(options.subject));
     }
     if (options.since)         params.set('since', toIso(options.since));
     if (options.until)         params.set('until', toIso(options.until));
