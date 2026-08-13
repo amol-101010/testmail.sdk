@@ -11,6 +11,8 @@ export interface Inbox {
   expiresAt: Date;
   /** ID of the team this inbox belongs to, or null for personal inboxes. */
   teamId: string | null;
+  /** Count of unread messages in this inbox. Only present on list/detail endpoints. */
+  unreadCount?: number;
 }
 
 export interface Team {
@@ -76,6 +78,9 @@ export interface Email {
   attachments?: Attachment[];
   /** SPF/DKIM/DMARC verdicts. Fields are null when not reported for the message. */
   auth: EmailAuth;
+  isRead: boolean;
+  /** When the message was marked read, or null if unread. */
+  readAt: Date | null;
 }
 
 // --- Request option types ------------------------------------------------------
@@ -182,6 +187,7 @@ export interface RawInbox {
   expires_at: string;
   deleted: boolean;
   team_id: string | null;
+  unread_count?: number;
 }
 
 export interface RawTeam {
@@ -228,4 +234,6 @@ export interface RawMessage {
   dkim?: string | null;
   dmarc?: string | null;
   attachments?: RawAttachment[];
+  is_read: boolean;
+  read_at: string | null;
 }

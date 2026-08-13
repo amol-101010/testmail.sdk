@@ -353,6 +353,48 @@ describe('auth verdict mapping', () => {
   });
 });
 
+describe('read status', () => {
+  const rawMsg = (extra: Record<string, unknown> = {}) => ({
+    id: 'm1', inbox_id: 'ib', from_addr: 'x@y.com', subject: 'hi',
+    body_text: 't', body_html: null, raw_size: 5, received_at: '2026-01-01T00:00:00Z',
+    is_read: false, read_at: null,
+    ...extra,
+  });
+
+  it('maps is_read/read_at onto email.isRead/readAt', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      resp(200, [rawMsg({ is_read: true, read_at: '2026-01-02T00:00:00Z' })])
+    ));
+    const [email] = await client().getEmails('ib');
+    expect(email.isRead).toBe(true);
+    expect(email.readAt).toEqual(new Date('2026-01-02T00:00:00Z'));
+  });
+
+  it('readAt is null when the message is unread', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, [rawMsg()])));
+    const [email] = await client().getEmails('ib');
+    expect(email.isRead).toBe(false);
+    expect(email.readAt).toBeNull();
+  });
+
+  it('markAsRead PATCHes the read-status route with is_read: true', async () => {
+    const fetch = vi.fn().mockResolvedValue(resp(200, rawMsg({ is_read: true, read_at: '2026-01-02T00:00:00Z' })));
+    vi.stubGlobal('fetch', fetch);
+    const email = await client().markAsRead('m1');
+    expect(fetch.mock.calls[0][0]).toBe('https://api.test/message/m1/read-status');
+    expect(fetch.mock.calls[0][1]).toMatchObject({ method: 'PATCH', body: JSON.stringify({ is_read: true }) });
+    expect(email.isRead).toBe(true);
+  });
+
+  it('markAsUnread PATCHes the read-status route with is_read: false', async () => {
+    const fetch = vi.fn().mockResolvedValue(resp(200, rawMsg({ is_read: false, read_at: null })));
+    vi.stubGlobal('fetch', fetch);
+    const email = await client().markAsUnread('m1');
+    expect(fetch.mock.calls[0][1]).toMatchObject({ method: 'PATCH', body: JSON.stringify({ is_read: false }) });
+    expect(email.isRead).toBe(false);
+  });
+});
+
 describe('downloadAttachment', () => {
   it('returns bytes plus content-type and parsed filename', async () => {
     const fetch = vi.fn().mockResolvedValue(

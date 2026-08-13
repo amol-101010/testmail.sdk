@@ -349,7 +349,33 @@ fs.writeFileSync(file.filename || attachment.filename || 'attachment.bin', Buffe
 
 ---
 
-### 3.15 `waitForLinkByText(inboxId, linkText, options?)`
+### 3.15 `markAsRead(messageId)`
+
+Marks a message as read. Only the message's owner can change its read status — no `inboxId` is required, the server resolves ownership from the message itself. Returns the updated `Email`.
+
+```typescript
+const email = await client.markAsRead(message.id);
+console.log(email.isRead); // true
+```
+
+**Worker route:** `PATCH /message/:id/read-status` — body `{ is_read: true }`
+
+---
+
+### 3.16 `markAsUnread(messageId)`
+
+Marks a message as unread. Same ownership rules as `markAsRead`.
+
+```typescript
+const email = await client.markAsUnread(message.id);
+console.log(email.isRead); // false
+```
+
+**Worker route:** `PATCH /message/:id/read-status` — body `{ is_read: false }`
+
+---
+
+### 3.17 `waitForLinkByText(inboxId, linkText, options?)`
 
 Polls the inbox until an email matching the optional filter arrives and contains a link with the specified link text (either matching anchor text or nearby plain text), then extracts and returns the URL.
 
@@ -368,7 +394,7 @@ console.log('Confirmation link URL:', url);
 
 ---
 
-### 3.16 `extractLinkByText(email, linkText)`
+### 3.18 `extractLinkByText(email, linkText)`
 
 Synchronous utility that extracts a link URL matching a specific link text from the provided `Email` object. In HTML content, matches the anchor's visible text. In plain text, matches a line containing the target text and pulls the first URL on that line. Returns `""` (empty string) if no match is found.
 
@@ -378,7 +404,7 @@ const resetUrl = client.extractLinkByText(email, 'Reset Password');
 
 ---
 
-### 3.17 `hasText(email, searchText)`
+### 3.19 `hasText(email, searchText)`
 
 Synchronous utility that checks if a specific text phrase exists anywhere in the email's subject, plain text body, or stripped HTML body (case-insensitive). Note that all search/filtering operations collapse and strip line breaks and carriage returns to ensure match robustness against line wraps.
 
@@ -388,7 +414,7 @@ const isValid = client.hasText(email, 'successful payment');
 
 ---
 
-### 3.18 `findEmailBySubject(emails, subject)`
+### 3.20 `findEmailBySubject(emails, subject)`
 
 Synchronous utility that searches an array of `Email` objects and returns the first email matching the given `subject` string or `RegExp`. Matching is resilient to line wraps and collapses carriage returns and newlines to spaces prior to matching. String matching is case-insensitive. RegExp matching tests against the original case of the subject with line breaks normalized.
 
@@ -411,7 +437,7 @@ const matchRegex = client.findEmailBySubject(emails, /\[Showrunnr\]/i);
 
 ---
 
-### 3.19 `findEmailByText(emails, text)`
+### 3.21 `findEmailByText(emails, text)`
 
 Synchronous utility that searches an array of `Email` objects and returns the first email whose subject or body contains the specified `text`. Matching is case-insensitive and resilient to line wraps (collapsing newlines and carriage returns to spaces in both the search query and email fields).
 
@@ -422,7 +448,7 @@ const invoiceEmail = client.findEmailByText(emails, 'successful payment invoice 
 
 ---
 
-### 3.20 `normalizeWhitespace(str)` and `normalizeText(str)`
+### 3.22 `normalizeWhitespace(str)` and `normalizeText(str)`
 
 Synchronous utilities to clean up strings prior to custom matches.
 - `normalizeWhitespace(str)` collapses carriage returns, newlines, and consecutive whitespace into standard single spaces and trims the result, preserving letter casing.
@@ -451,6 +477,7 @@ export interface Inbox {
   permanent:  boolean;     // true = never expires (Pro only)
   createdAt:  Date;
   expiresAt:  Date;        // year 2099 for permanent inboxes
+  unreadCount?: number;    // only present on list/detail endpoints
 }
 
 export interface Email {
@@ -462,6 +489,8 @@ export interface Email {
   bodyText:   string | null;
   bodyHtml:   string | null;
   rawSize:    number | null;
+  isRead:     boolean;
+  readAt:     Date | null; // when the message was marked read, or null if unread
 }
 
 export interface CreateInboxOptions {

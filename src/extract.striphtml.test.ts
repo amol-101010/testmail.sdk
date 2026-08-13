@@ -12,6 +12,8 @@ const html = (bodyHtml: string): Email => ({
   rawSize: null,
   receivedAt: new Date(),
   auth: { spf: null, dkim: null, dmarc: null },
+  isRead: false,
+  readAt: null,
 });
 
 describe('stripHtml does not leak <style>/<script> contents', () => {
