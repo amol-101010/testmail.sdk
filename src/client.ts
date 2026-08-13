@@ -86,6 +86,7 @@ function toInbox(raw: RawInbox): Inbox {
     createdAt:  new Date(raw.created_at),
     expiresAt:  new Date(raw.expires_at),
     teamId:     raw.team_id,
+    unreadCount: raw.unread_count,
   };
 }
 
@@ -161,6 +162,8 @@ function toEmail(raw: RawMessage): Email {
       dkim:  toVerdict(raw.dkim),
       dmarc: toVerdict(raw.dmarc),
     },
+    isRead: raw.is_read,
+    readAt: raw.read_at ? new Date(raw.read_at) : null,
   };
 }
 
@@ -266,7 +269,7 @@ export class TestmailClient {
   }
 
   private async request<T>(
-    method: 'GET' | 'POST' | 'DELETE',
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     path: string,
     body?: unknown
   ): Promise<T> {
@@ -413,6 +416,26 @@ export class TestmailClient {
       emails: (res.messages ?? []).map(toEmail),
       nextCursor: res.nextCursor ?? null,
     };
+  }
+
+  /** Mark a message as read. No inbox ID needed — the server resolves ownership from the message. */
+  async markAsRead(messageId: string): Promise<Email> {
+    const raw = await this.request<RawMessage>(
+      'PATCH',
+      '/message/' + encodeURIComponent(messageId) + '/read-status',
+      { is_read: true }
+    );
+    return toEmail(raw);
+  }
+
+  /** Mark a message as unread. */
+  async markAsUnread(messageId: string): Promise<Email> {
+    const raw = await this.request<RawMessage>(
+      'PATCH',
+      '/message/' + encodeURIComponent(messageId) + '/read-status',
+      { is_read: false }
+    );
+    return toEmail(raw);
   }
 
   async waitForEmail(inboxId: string, options: WaitForEmailOptions = {}): Promise<Email> {
