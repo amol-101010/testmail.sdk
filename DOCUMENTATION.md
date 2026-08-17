@@ -463,6 +463,44 @@ const lowerClean = normalizeText('  Hello\r\nWorld!  '); // "hello world!"
 
 ---
 
+### 3.23 `waitForEmailBySubject(inboxId, subject, options?)`
+
+Polls the inbox (default timeout `30000` ms, default interval `2000` ms — same defaults as `waitForEmail`) until an email with a matching subject arrives, or throws `TimeoutError`. This is the async counterpart to `findEmailBySubject`: use it whenever the email might not have been delivered yet (e.g. immediately after triggering a signup), instead of fetching once and getting a false negative because delivery hasn't caught up. Accepts a string (case-insensitive substring match, resilient to line wraps) or a `RegExp`.
+
+```typescript
+const email = await client.waitForEmailBySubject(inbox.id, 'Welcome to our platform!');
+
+// Regex + custom timeout + an additional filter (ANDed with the subject match)
+const invoice = await client.waitForEmailBySubject(inbox.id, /Invoice #\d+/, {
+  timeout: 60_000,
+  filter: e => e.from === 'billing@acme.com',
+});
+```
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `timeout` | `number` | `30000` | Max ms to wait before throwing `TimeoutError` |
+| `interval` | `number` | `2000` | Polling cadence in ms |
+| `filter` | `(email: Email) => boolean` | — | Additional criteria, ANDed with the subject match |
+
+---
+
+### 3.24 `waitForEmailByText(inboxId, text, options?)`
+
+Polls the inbox (default timeout `30000` ms) until an email containing `text` anywhere in its subject or body arrives, or throws `TimeoutError`. This is the async counterpart to `findEmailByText`, for when the message may still be in flight.
+
+```typescript
+const email = await client.waitForEmailByText(inbox.id, 'activation code');
+```
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `timeout` | `number` | `30000` | Max ms to wait before throwing `TimeoutError` |
+| `interval` | `number` | `2000` | Polling cadence in ms |
+| `filter` | `(email: Email) => boolean` | — | Additional criteria, ANDed with the text match |
+
+---
+
 ## 4. Types
 
 ```typescript

@@ -515,6 +515,50 @@ export class TestmailClient {
     return extractedLink;
   }
 
+  /**
+   * Wait for an email whose subject matches (default timeout 30s, like
+   * waitForEmail). Use this instead of findEmailBySubject() when the message
+   * may not have been delivered to the inbox yet — it polls getEmails()
+   * until a match arrives or the timeout elapses, instead of returning null
+   * for an email that just hasn't landed.
+   */
+  async waitForEmailBySubject(
+    inboxId: string,
+    subject: string | RegExp,
+    options: WaitForEmailOptions = {}
+  ): Promise<Email> {
+    const { filter, ...rest } = options;
+    return pollForEmail(inboxId, () => this.getEmails(inboxId), {
+      ...rest,
+      filter: (email) => {
+        if (filter && !filter(email)) return false;
+        return findEmailBySubject([email], subject) !== null;
+      },
+    });
+  }
+
+  /**
+   * Wait for an email whose subject or body contains the given text
+   * (default timeout 30s, like waitForEmail). Use this instead of
+   * findEmailByText() when the message may not have been delivered to the
+   * inbox yet — it polls getEmails() until a match arrives or the timeout
+   * elapses, instead of returning null for an email that just hasn't landed.
+   */
+  async waitForEmailByText(
+    inboxId: string,
+    text: string,
+    options: WaitForEmailOptions = {}
+  ): Promise<Email> {
+    const { filter, ...rest } = options;
+    return pollForEmail(inboxId, () => this.getEmails(inboxId), {
+      ...rest,
+      filter: (email) => {
+        if (filter && !filter(email)) return false;
+        return findEmailByText([email], text) !== null;
+      },
+    });
+  }
+
   extractLinkByText(email: Email, linkText: string): string {
     return extractLinkByText(email, linkText);
   }

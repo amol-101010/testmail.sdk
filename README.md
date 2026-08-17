@@ -433,6 +433,32 @@ const resetUrl = await client.waitForLinkByText(inbox.id, 'Reset Password', { ti
 
 ---
 
+### `waitForEmailBySubject(inboxId, subject, options?)`
+
+Polls (default timeout **30,000 ms**, same as `waitForEmail`) until an email with a matching subject arrives, instead of failing when a message just hasn't been delivered yet. Use this in place of `findEmailBySubject` whenever the email might still be in flight — e.g. right after triggering a signup or notification in a test. Accepts a string (substring match) or a `RegExp`, plus all `waitForEmail` options (an extra `filter` is ANDed with the subject match).
+
+```typescript
+const email = await client.waitForEmailBySubject(inbox.id, 'Welcome to our platform!');
+// or with a regex and a longer timeout
+const invoice = await client.waitForEmailBySubject(inbox.id, /Invoice #\d+/, { timeout: 60_000 });
+```
+
+Throws **`TimeoutError`** if no matching email arrives within `timeout` ms.
+
+---
+
+### `waitForEmailByText(inboxId, text, options?)`
+
+Polls (default timeout **30,000 ms**) until an email containing `text` anywhere in its subject or body arrives. Use this in place of `findEmailByText` when the email may still be in flight.
+
+```typescript
+const email = await client.waitForEmailByText(inbox.id, 'activation code');
+```
+
+Throws **`TimeoutError`** if no matching email arrives within `timeout` ms.
+
+---
+
 ### Standalone extractors
 
 The extraction helpers are also exported as pure functions you can run against any `Email` you already have (e.g. one returned by `getEmails`/`searchEmails`):

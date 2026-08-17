@@ -6,6 +6,7 @@ import {
   PlanRestrictionError,
   QuotaExceededError,
   AliasConflictError,
+  TimeoutError,
 } from './errors.js';
 
 function resp(status: number, body: unknown, headers: Record<string, string> = {}) {
@@ -306,6 +307,72 @@ describe('email deserialization — newline + whitespace normalization', () => {
     await vi.advanceTimersByTimeAsync(3000);
     const email = await p;
     expect(email.subject).toBe('[Showrunnr] TV Only shared Note with you');
+  });
+});
+
+describe('waitForEmailBySubject', () => {
+  const rawMsg = (subject: string | null) => ([{
+    id: 'm1', inbox_id: 'ib', from_addr: 'x@y.com',
+    subject, body_text: 't', body_html: null, raw_size: 5,
+    received_at: '2026-01-01T00:00:00Z',
+  }]);
+
+  it('retries until a matching subject is delivered, instead of failing immediately', async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(resp(200, []))
+      .mockResolvedValueOnce(resp(200, []))
+      .mockResolvedValue(resp(200, rawMsg('Welcome to our platform!')));
+    vi.stubGlobal('fetch', fetch);
+
+    const p = client().waitForEmailBySubject('ib', 'Welcome');
+    await vi.advanceTimersByTimeAsync(4000);
+    const email = await p;
+
+    expect(email.subject).toBe('Welcome to our platform!');
+    expect(fetch.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('defaults to a 30s timeout, like waitForEmail', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, [])));
+
+    const p = client().waitForEmailBySubject('ib', 'never arrives');
+    p.catch(() => {});
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    await expect(p).rejects.toBeInstanceOf(TimeoutError);
+  });
+
+  it('supports regex subjects and an additional caller filter', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, rawMsg('Order #1024 shipped'))));
+
+    const email = await client().waitForEmailBySubject('ib', /Order #\d+/, {
+      filter: e => e.from === 'x@y.com',
+    });
+    expect(email.subject).toBe('Order #1024 shipped');
+  });
+});
+
+describe('waitForEmailByText', () => {
+  const rawMsg = (bodyText: string | null) => ([{
+    id: 'm1', inbox_id: 'ib', from_addr: 'x@y.com',
+    subject: 'hi', body_text: bodyText, body_html: null, raw_size: 5,
+    received_at: '2026-01-01T00:00:00Z',
+  }]);
+
+  it('retries until matching body text is delivered, instead of failing immediately', async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(resp(200, []))
+      .mockResolvedValue(resp(200, rawMsg('your activation code is 4821')));
+    vi.stubGlobal('fetch', fetch);
+
+    const p = client().waitForEmailByText('ib', 'activation code');
+    await vi.advanceTimersByTimeAsync(2000);
+    const email = await p;
+
+    expect(email.bodyText).toBe('your activation code is 4821');
   });
 });
 
