@@ -230,7 +230,24 @@ client.searchEmails(inboxId, { since: oneHourAgo, limit: 200 });
 
 ---
 
-### 3.8 `waitForEmail(inboxId, options?)`
+### 3.8 `getUnreadEmails(inboxId, sinceSeconds?)`
+
+Returns unread emails, newest first (up to 200). The server doesn't filter on read state, so this fetches (optionally windowed) messages and filters client-side on `isRead`.
+
+Pass `sinceSeconds` to also restrict to messages received within that trailing window — e.g. `60` for the last minute, `600` for the last 10 minutes, `3600` for the last hour. Omit it to return every unread email regardless of age.
+
+```typescript
+const allUnread = await client.getUnreadEmails(inbox.id);
+// allUnread: Email[]
+
+const unreadLastMinute = await client.getUnreadEmails(inbox.id, 60);
+const unreadLast10Minutes = await client.getUnreadEmails(inbox.id, 600);
+const unreadLastHour = await client.getUnreadEmails(inbox.id, 3600);
+```
+
+---
+
+### 3.9 `waitForEmail(inboxId, options?)`
 
 The **killer feature** for test automation. Polls `getEmails()` on an interval
 until at least one email matches the predicate, or the timeout elapses.
@@ -256,20 +273,19 @@ const email = await client.waitForEmail(inbox.id, {
 
 ---
 
-### 3.9 `deleteInbox(inboxId)`
+### 3.10 `deleteEmail(messageId)`
 
-Immediately deletes the inbox and all its emails.
-Useful in `afterEach` teardown to keep the system clean.
+Permanently deletes a single email. No inbox ID needed — the server resolves ownership from the message.
 
 ```typescript
-await client.deleteInbox(inbox.id);
+await client.deleteEmail(email.id);
 ```
 
-**Worker route:** `DELETE /inboxes/:id`
+**Worker route:** `DELETE /message/:messageId`
 
 ---
 
-### 3.10 `getOrCreateInbox(alias, options?)`
+### 3.11 `getOrCreateInbox(alias, options?)`
 
 Idempotently connects to an existing inbox by its alias, or creates a new one if it does not exist.
 
@@ -281,7 +297,7 @@ const inbox = await client.getOrCreateInbox('ci-build-inbox', {
 
 ---
 
-### 3.11 `resolve(aliasOrId)`
+### 3.12 `resolve(aliasOrId)`
 
 Smart lookup that accepts either an inbox UUID or an alias string and returns the corresponding `Inbox`, or `null` if not found.
 
@@ -292,7 +308,7 @@ const inboxById = await client.resolve('550e8400-e29b-41d4-a716-446655440000');
 
 ---
 
-### 3.12 `waitForOtp(inboxId, options?)`
+### 3.13 `waitForOtp(inboxId, options?)`
 
 Extends polling logic to automatically extract a One-Time Password (OTP) code from the incoming email's text or HTML body.
 
@@ -314,7 +330,7 @@ console.log('OTP Code:', otp); // "123456"
 
 ---
 
-### 3.13 `waitForLink(inboxId, options?)`
+### 3.14 `waitForLink(inboxId, options?)`
 
 Extends polling logic to locate and extract a verification or magic link from the incoming email.
 
@@ -332,7 +348,7 @@ console.log('Clicking link:', link); // "https://myapp.com/verify?token=..."
 
 ---
 
-### 3.14 `downloadAttachment(attachmentId)`
+### 3.15 `downloadAttachment(attachmentId)`
 
 Downloads an email attachment. Returns `{ data: ArrayBuffer, contentType: string | null, filename: string | null }`. Shares the client's timeout + automatic-retry transport.
 
@@ -349,7 +365,7 @@ fs.writeFileSync(file.filename || attachment.filename || 'attachment.bin', Buffe
 
 ---
 
-### 3.15 `markAsRead(messageId)`
+### 3.16 `markAsRead(messageId)`
 
 Marks a message as read. Only the message's owner can change its read status — no `inboxId` is required, the server resolves ownership from the message itself. Returns the updated `Email`.
 
@@ -362,7 +378,7 @@ console.log(email.isRead); // true
 
 ---
 
-### 3.16 `markAsUnread(messageId)`
+### 3.17 `markAsUnread(messageId)`
 
 Marks a message as unread. Same ownership rules as `markAsRead`.
 
@@ -375,7 +391,7 @@ console.log(email.isRead); // false
 
 ---
 
-### 3.17 `waitForLinkByText(inboxId, linkText, options?)`
+### 3.18 `waitForLinkByText(inboxId, linkText, options?)`
 
 Polls the inbox until an email matching the optional filter arrives and contains a link with the specified link text (either matching anchor text or nearby plain text), then extracts and returns the URL.
 
@@ -394,7 +410,7 @@ console.log('Confirmation link URL:', url);
 
 ---
 
-### 3.18 `extractLinkByText(email, linkText)`
+### 3.19 `extractLinkByText(email, linkText)`
 
 Synchronous utility that extracts a link URL matching a specific link text from the provided `Email` object. In HTML content, matches the anchor's visible text. In plain text, matches a line containing the target text and pulls the first URL on that line. Returns `""` (empty string) if no match is found.
 
@@ -404,7 +420,7 @@ const resetUrl = client.extractLinkByText(email, 'Reset Password');
 
 ---
 
-### 3.19 `hasText(email, searchText)`
+### 3.20 `hasText(email, searchText)`
 
 Synchronous utility that checks if a specific text phrase exists anywhere in the email's subject, plain text body, or stripped HTML body (case-insensitive). Note that all search/filtering operations collapse and strip line breaks and carriage returns to ensure match robustness against line wraps.
 
@@ -414,7 +430,7 @@ const isValid = client.hasText(email, 'successful payment');
 
 ---
 
-### 3.20 `findEmailBySubject(emails, subject)`
+### 3.21 `findEmailBySubject(emails, subject)`
 
 Synchronous utility that searches an array of `Email` objects and returns the first email matching the given `subject` string or `RegExp`. Matching is resilient to line wraps and collapses carriage returns and newlines to spaces prior to matching. String matching is case-insensitive. RegExp matching tests against the original case of the subject with line breaks normalized.
 
@@ -437,7 +453,7 @@ const matchRegex = client.findEmailBySubject(emails, /\[Showrunnr\]/i);
 
 ---
 
-### 3.21 `findEmailByText(emails, text)`
+### 3.22 `findEmailByText(emails, text)`
 
 Synchronous utility that searches an array of `Email` objects and returns the first email whose subject or body contains the specified `text`. Matching is case-insensitive and resilient to line wraps (collapsing newlines and carriage returns to spaces in both the search query and email fields).
 
@@ -448,7 +464,7 @@ const invoiceEmail = client.findEmailByText(emails, 'successful payment invoice 
 
 ---
 
-### 3.22 `normalizeWhitespace(str)` and `normalizeText(str)`
+### 3.23 `normalizeWhitespace(str)` and `normalizeText(str)`
 
 Synchronous utilities to clean up strings prior to custom matches.
 - `normalizeWhitespace(str)` collapses carriage returns, newlines, and consecutive whitespace into standard single spaces and trims the result, preserving letter casing.
@@ -463,7 +479,7 @@ const lowerClean = normalizeText('  Hello\r\nWorld!  '); // "hello world!"
 
 ---
 
-### 3.23 `waitForEmailBySubject(inboxId, subject, options?)`
+### 3.24 `waitForEmailBySubject(inboxId, subject, options?)`
 
 Polls the inbox (default timeout `30000` ms, default interval `2000` ms — same defaults as `waitForEmail`) until an email with a matching subject arrives, or throws `TimeoutError`. This is the async counterpart to `findEmailBySubject`: use it whenever the email might not have been delivered yet (e.g. immediately after triggering a signup), instead of fetching once and getting a false negative because delivery hasn't caught up. Accepts a string (case-insensitive substring match, resilient to line wraps) or a `RegExp`.
 
@@ -485,7 +501,7 @@ const invoice = await client.waitForEmailBySubject(inbox.id, /Invoice #\d+/, {
 
 ---
 
-### 3.24 `waitForEmailByText(inboxId, text, options?)`
+### 3.25 `waitForEmailByText(inboxId, text, options?)`
 
 Polls the inbox (default timeout `30000` ms) until an email containing `text` anywhere in its subject or body arrives, or throws `TimeoutError`. This is the async counterpart to `findEmailByText`, for when the message may still be in flight.
 
@@ -711,8 +727,6 @@ test('user can verify email after signup', async ({ page }) => {
   await page.fill('[name=otp]', otp);
   await page.click('[data-testid=verify-btn]');
   await expect(page).toHaveURL('/dashboard');
-
-  await mail.deleteInbox(inbox.id);   // cleanup
 });
 ```
 
@@ -729,10 +743,6 @@ test.describe('email flows', () => {
 
   test.beforeEach(async () => {
     inbox = await mail.createInbox({ ttlSeconds: 120 });
-  });
-
-  test.afterEach(async () => {
-    await mail.deleteInbox(inbox.id);
   });
 
   test('password reset email arrives', async ({ page }) => {

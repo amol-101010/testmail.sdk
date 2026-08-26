@@ -47,9 +47,6 @@ const email = await client.waitForEmail(inbox.id, {
   filter: e => e.subject?.includes('Verify') ?? false,
 });
 console.log(email.bodyText);
-
-// Clean up
-await client.deleteInbox(inbox.id);
 ```
 
 ## Common Recipes & Patterns
@@ -114,6 +111,12 @@ if (inbox) {
 
   // Option E: Fetch only emails from the last hour
   const recentEmails = await client.getEmailsLastHour(inbox.id);
+
+  // Option F: Fetch unread emails (optionally windowed to a trailing period)
+  const unread = await client.getUnreadEmails(inbox.id);
+  const unreadLastMinute = await client.getUnreadEmails(inbox.id, 60);
+  const unreadLast10Min = await client.getUnreadEmails(inbox.id, 600);
+  const unreadLastHour = await client.getUnreadEmails(inbox.id, 3600);
 }
 ```
 
@@ -340,6 +343,19 @@ const recentEmails = await client.getEmailsLastHour(inbox.id);
 
 ---
 
+### `getUnreadEmails(inboxId, sinceSeconds?)`
+
+Returns unread emails, newest first (up to 200). Pass `sinceSeconds` to also restrict to messages received within that trailing window; omit it to return every unread email regardless of age.
+
+```typescript
+const allUnread = await client.getUnreadEmails(inbox.id);
+const unreadLastMinute = await client.getUnreadEmails(inbox.id, 60);   // last minute
+const unreadLast10Min = await client.getUnreadEmails(inbox.id, 600);   // last 10 minutes
+const unreadLastHour = await client.getUnreadEmails(inbox.id, 3600);   // last hour
+```
+
+---
+
 ### `searchEmails(inboxId, options?)`
 
 Server-side search, filtering, and cursor pagination. Returns one page of emails plus a `nextCursor` (`null` when there are no more pages). Use this instead of `getEmails` for busy inboxes (which returns at most 200) or when you need filtering.
@@ -492,9 +508,13 @@ All of these read the plain-text body when present and otherwise fall back to th
 
 ---
 
-### `deleteInbox(inboxId)`
+### `deleteEmail(messageId)`
 
-Immediately deletes the inbox and all its emails.
+Permanently deletes a single email. No inbox ID needed — the server resolves ownership from the message.
+
+```typescript
+await client.deleteEmail(email.id);
+```
 
 ---
 
@@ -522,8 +542,6 @@ test('email verification', async ({ page }) => {
   await page.fill('[name=otp]', otp);
   await page.click('[data-testid=verify-btn]');
   await expect(page).toHaveURL(/\/dashboard/);
-
-  await mail.deleteInbox(inbox.id);
 });
 ```
 

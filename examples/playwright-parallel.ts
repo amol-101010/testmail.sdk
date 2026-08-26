@@ -33,11 +33,6 @@ test.describe('Password flows', () => {
     });
   });
 
-  test.afterEach(async () => {
-    // Best-effort cleanup — don't fail the test if delete errors
-    await mail.deleteInbox(inbox.id).catch(() => {});
-  });
-
   test('password reset email arrives', async ({ page }) => {
     await page.goto('https://myapp.example.com/forgot-password');
     await page.fill('[name=email]', inbox.address);
