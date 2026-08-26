@@ -379,6 +379,24 @@ export class TestmailClient {
   }
 
   /**
+   * Fetch unread emails from an inbox, newest first, up to 200. Pass
+   * `sinceSeconds` to also restrict to messages received within that
+   * trailing window — e.g. 60 for the last minute, 600 for the last 10
+   * minutes, 3600 for the last hour — or omit it to return every unread
+   * email regardless of age. The server doesn't filter on read state, so
+   * this fetches (optionally windowed) messages and filters client-side.
+   */
+  async getUnreadEmails(inboxId: string, sinceSeconds?: number): Promise<Email[]> {
+    if (sinceSeconds != null) {
+      const since = new Date(Date.now() - sinceSeconds * 1000);
+      const { emails } = await this.searchEmails(inboxId, { since, limit: 200 });
+      return emails.filter(email => !email.isRead);
+    }
+    const emails = await this.getEmails(inboxId);
+    return emails.filter(email => !email.isRead);
+  }
+
+  /**
    * Search/filter emails server-side with cursor pagination. Returns one page
    * of results plus a `nextCursor` (null when there are no more pages).
    *
@@ -590,8 +608,9 @@ export class TestmailClient {
     return findEmailByText(emails, text);
   }
 
-  async deleteInbox(inboxId: string): Promise<void> {
-    await this.request<{ success: boolean }>('DELETE', '/inbox/' + encodeURIComponent(inboxId));
+  /** Permanently delete a single email. No inbox ID needed — the server resolves ownership from the message. */
+  async deleteEmail(messageId: string): Promise<void> {
+    await this.request<{ success: boolean }>('DELETE', '/message/' + encodeURIComponent(messageId));
   }
 
   async getOrCreateInbox(alias: string, options: Omit<CreateInboxOptions, 'alias'> = {}): Promise<Inbox> {

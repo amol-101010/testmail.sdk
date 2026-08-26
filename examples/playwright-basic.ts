@@ -55,8 +55,5 @@ test.describe('Email verification', () => {
     await page.fill('[name=otp]', otp!);
     await page.click('[data-testid=verify-btn]');
     await expect(page).toHaveURL(/\/dashboard/);
-
-    // ── 6. Teardown ───────────────────────────────────────────────────────────
-    await mail.deleteInbox(inbox.id);
   });
 });

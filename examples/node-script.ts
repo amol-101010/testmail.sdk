@@ -94,10 +94,6 @@ async function main() {
   });
   console.log('Created long-lived inbox:', longInbox.address);
   console.log('Expires at:', longInbox.expiresAt.toISOString());
-
-  // Clean up the long-lived one immediately in this demo
-  await client.deleteInbox(longInbox.id);
-  console.log('Deleted long-lived inbox.');
 }
 
 main().catch(err => {
