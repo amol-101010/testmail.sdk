@@ -157,6 +157,13 @@ export interface ExtractLinkOptions {
 export interface WaitForOtpOptions extends WaitForEmailOptions, ExtractOtpOptions {}
 export interface WaitForLinkOptions extends WaitForEmailOptions, ExtractLinkOptions {}
 
+export interface ScreenshotOptions {
+  /** Named viewport preset, or explicit pixel dimensions. Defaults to 'desktop' (800x1200). */
+  viewport?: 'desktop' | 'mobile' | { width: number; height: number };
+  /** Capture the full scrollable page rather than just the visible viewport. Defaults to true. */
+  fullPage?: boolean;
+}
+
 export interface ClientOptions {
   apiKey: string;
   baseUrl?: string;

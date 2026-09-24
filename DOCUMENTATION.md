@@ -579,8 +579,9 @@ TestmailError
 │   ├── AliasConflictError    — HTTP 409: alias taken; carries .existingInboxId
 │   ├── PlanRestrictionError  — HTTP 403: feature requires Pro plan
 │   └── QuotaExceededError    — HTTP 409: plan cap hit; carries .limit + .current
-└── TimeoutError              — waitForEmail timed out
-└── RequestTimeoutError       — network/server fetch timed out
+├── TimeoutError              — waitForEmail timed out
+├── RequestTimeoutError       — network/server fetch timed out
+└── ScreenshotDependencyError — screenshotEmail() called without `playwright` installed
 ```
 
 Usage:
@@ -770,6 +771,44 @@ const email = await client.waitForEmail(inbox.id, { timeout: 60_000 });
 console.log('Got:', email.subject, 'from', email.from);
 console.log(email.bodyText);
 ```
+
+### 8.4 Screenshotting a rendered email (Node.js, local headless browser)
+
+`screenshotEmail` (exported from `@testmail-stream/sdk/node`) renders `email.bodyHtml` in a local
+headless browser and returns a PNG `Buffer`. It requires `playwright` as a dev dependency in the
+*consuming* project — the SDK does not bundle it (`peerDependencies`, marked optional), so
+projects that never call `screenshotEmail` pay zero extra install weight. Rendering happens
+entirely on your own machine/CI runner; no HTML is sent to testmail.stream or any third party,
+and JavaScript execution is disabled in the rendered page since email HTML is untrusted content.
+
+```typescript
+// npm i -D playwright
+import { TestmailClient } from '@testmail-stream/sdk';
+import { screenshotEmail, ScreenshotDependencyError } from '@testmail-stream/sdk/node';
+import { writeFile } from 'fs/promises';
+
+const client = new TestmailClient({ apiKey: process.env.TESTMAIL_API_KEY! });
+const inbox = await client.createInbox({ label: 'screenshot-check' });
+const email = await client.waitForEmail(inbox.id, { timeout: 30_000 });
+
+try {
+  const png = await screenshotEmail(email, { viewport: 'desktop', fullPage: true });
+  await writeFile('email.png', png);
+
+  // e.g. attach to a Playwright test report:
+  // await testInfo.attach('email-preview', { body: png, contentType: 'image/png' });
+} catch (err) {
+  if (err instanceof ScreenshotDependencyError) {
+    console.error('Run `npm i -D playwright` to enable screenshotEmail()');
+  } else {
+    throw err;
+  }
+}
+```
+
+`ScreenshotOptions`:
+- `viewport?: 'desktop' | 'mobile' | { width: number; height: number }` — defaults to `'desktop'` (800×1200); `'mobile'` is 375×812.
+- `fullPage?: boolean` — capture the full scrollable page rather than just the viewport. Defaults to `true`.
 
 ---
 
