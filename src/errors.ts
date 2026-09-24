@@ -110,3 +110,19 @@ export class QuotaExceededError extends ApiError {
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
+
+/**
+ * Thrown by screenshotEmail() when `playwright` is not installed.
+ * Playwright is an optional peer dependency — install it in your own
+ * project to use this feature: `npm i -D playwright`.
+ */
+export class ScreenshotDependencyError extends TestmailError {
+  constructor() {
+    super(
+      'screenshotEmail() requires "playwright" to be installed in your project. ' +
+      'Install it with: npm i -D playwright'
+    );
+    this.name = 'ScreenshotDependencyError';
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}

@@ -174,6 +174,18 @@ if (email.attachments && email.attachments.length > 0) {
   const savedPath = await saveAttachment(client, attachment.id, './downloads');
   console.log(`Attachment saved to: ${savedPath}`);
 }
+
+// 6. Screenshotting an email's rendered HTML (Node.js helper)
+// Requires `playwright` in your project: npm i -D playwright
+// Renders locally in your own test runner/CI — nothing is uploaded anywhere.
+import { screenshotEmail } from '@testmail-stream/sdk/node';
+import { writeFile } from 'fs/promises';
+
+const png = await screenshotEmail(email, { viewport: 'desktop' }); // or 'mobile' / { width, height }
+await writeFile('email.png', png);
+
+// Handy for visual assertions or attaching to a Playwright/Allure test report:
+await testInfo.attach('email-preview', { body: png, contentType: 'image/png' });
 ```
 
 ---
