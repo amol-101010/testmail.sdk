@@ -809,6 +809,7 @@ try {
 `ScreenshotOptions`:
 - `viewport?: 'desktop' | 'mobile' | { width: number; height: number }` — defaults to `'desktop'` (800×1200); `'mobile'` is 375×812.
 - `fullPage?: boolean` — capture the full scrollable page rather than just the viewport. Defaults to `true`.
+- `includeHeader?: boolean` — render the sender (From), Reply-To (when the message has one), subject and received time above the body so the screenshot verifies who sent the mail, not just its body. Defaults to `false`.
 
 ---
 
