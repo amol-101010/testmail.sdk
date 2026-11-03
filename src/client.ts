@@ -141,6 +141,20 @@ function toVerdict(v: string | null | undefined): AuthVerdict | null {
   return AUTH_VERDICTS.has(t) ? (t as AuthVerdict) : null;
 }
 
+/** Extract the Reply-To value from stored raw header lines (handles folded continuation lines). */
+function parseReplyTo(headers: string | null | undefined): string | null {
+  if (!headers) return null;
+  const lines = headers.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^reply-to\s*:\s*(.*)$/i.exec(lines[i]);
+    if (!m) continue;
+    let value = m[1];
+    while (i + 1 < lines.length && /^[ \t]/.test(lines[i + 1])) value += ' ' + lines[++i].trim();
+    return normalizeWhitespace(value) || null;
+  }
+  return null;
+}
+
 function toEmail(raw: RawMessage): Email {
   return {
     id:          raw.id,
@@ -154,7 +168,8 @@ function toEmail(raw: RawMessage): Email {
     subject:     raw.subject != null ? normalizeWhitespace(raw.subject) : null,
     bodyText:    raw.body_text,
     bodyHtml:    raw.body_html,
-    rawSize:     raw.raw_size,
+    replyTo:     parseReplyTo(raw.headers),
+    rawSize:    raw.raw_size,
     receivedAt:  new Date(raw.received_at),
     attachments: raw.attachments?.map(toAttachment),
     auth: {

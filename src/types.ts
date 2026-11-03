@@ -73,6 +73,11 @@ export interface Email {
   subject: string | null;
   bodyText: string | null;
   bodyHtml: string | null;
+  /**
+   * Address replies are routed to (the Reply-To header), or null when the message has none.
+   * Use it to verify a "relay to" / reply address, not just the sender in `from`.
+   */
+  replyTo?: string | null;
   rawSize: number | null;
   receivedAt: Date;
   attachments?: Attachment[];
@@ -162,6 +167,11 @@ export interface ScreenshotOptions {
   viewport?: 'desktop' | 'mobile' | { width: number; height: number };
   /** Capture the full scrollable page rather than just the visible viewport. Defaults to true. */
   fullPage?: boolean;
+  /**
+   * Render a header above the body showing the sender (From), subject and received time,
+   * so the screenshot verifies who sent the mail, not just its body. Defaults to false.
+   */
+  includeHeader?: boolean;
 }
 
 export interface ClientOptions {
@@ -235,6 +245,8 @@ export interface RawMessage {
   subject: string | null;
   body_text: string | null;
   body_html: string | null;
+  /** Raw header lines as stored by the worker (newline-separated). */
+  headers?: string | null;
   raw_size: number | null;
   received_at: string;
   spf?: string | null;
